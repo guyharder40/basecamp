@@ -54,6 +54,8 @@ export default function App() {
   const [campName, setCampName] = useState('');
   const [campLocation, setCampLocation] = useState('');
   const [campAcres, setCampAcres] = useState('');
+  const [campLat, setCampLat] = useState('');
+  const [campLng, setCampLng] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [huntNow, setHuntNow] = useState<{ best: HuntNowCamp | null; camps: HuntNowCamp[] } | null>(null);
@@ -145,10 +147,24 @@ export default function App() {
   async function createCamp() {
     if (!campName.trim()) { setError('Enter a camp name first.'); return; }
     if (containsBadLanguage(campName) || containsBadLanguage(campLocation)) { setError(BAD_LANGUAGE_WARNING); return; }
+    // Optional map coordinates: if either box is filled, both must be
+    // valid numbers in range — the camp map opens at that spot.
+    let centerLat = 39.8283;
+    let centerLng = -98.5795;
+    if (campLat.trim() || campLng.trim()) {
+      const lat = Number(campLat);
+      const lng = Number(campLng);
+      if (!campLat.trim() || !campLng.trim() || Number.isNaN(lat) || Number.isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        setError('Check the map coordinates: latitude runs -90 to 90 and longitude -180 to 180 — or clear both boxes to set the location later.');
+        return;
+      }
+      centerLat = lat;
+      centerLng = lng;
+    }
     setBusy(true); setError('');
     try {
-      const camp = await api.createCamp({ name: campName.trim(), location: campLocation.trim() || 'Not set', acres: campAcres.trim() || '', centerLat: 39.8283, centerLng: -98.5795, mapZoom: 14 });
-      setCampName(''); setCampLocation(''); setCampAcres(''); setShowCreate(false);
+      const camp = await api.createCamp({ name: campName.trim(), location: campLocation.trim() || 'Not set', acres: campAcres.trim() || '', centerLat, centerLng, mapZoom: 14 });
+      setCampName(''); setCampLocation(''); setCampAcres(''); setCampLat(''); setCampLng(''); setShowCreate(false);
       await loadAll();
       setOpenCampId(camp.id);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create camp.'); }
@@ -322,6 +338,17 @@ export default function App() {
                     <input value={campLocation} onChange={e => setCampLocation(e.target.value)} placeholder="e.g. City, State" />
                     <label>Acres</label>
                     <input value={campAcres} onChange={e => setCampAcres(e.target.value)} placeholder="e.g. 50" inputMode="decimal" />
+                    <div className="row">
+                      <span className="grow">
+                        <label>Latitude</label>
+                        <input value={campLat} onChange={e => setCampLat(e.target.value)} placeholder="e.g. 39.5000" inputMode="decimal" />
+                      </span>
+                      <span className="grow">
+                        <label>Longitude</label>
+                        <input value={campLng} onChange={e => setCampLng(e.target.value)} placeholder="e.g. -98.3500" inputMode="decimal" />
+                      </span>
+                    </div>
+                    <p className="small">Optional — if you give coordinates, the camp map opens right at that spot. Leave both blank to set the location later from inside the camp.</p>
                     {containsBadLanguage(campName) && <p className="err">{BAD_LANGUAGE_WARNING}</p>}
                     {!campName.trim() && <p className="small">Enter a camp name to create it.</p>}
                     <div className="row" style={{ marginTop: 8 }}><button className="btn primary grow" disabled={!campName.trim() || busy || containsBadLanguage(campName)} onClick={createCamp}>Create camp</button></div>
