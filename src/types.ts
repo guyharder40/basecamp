@@ -21,7 +21,7 @@ export interface Hunt { id: number; date: string; species: string; stand?: strin
 export interface LicenseTag { id: number; licenseId: number; animal: string; kind: string; tagNumber: string; filled: boolean; filledDate?: string; createdAt?: string; }
 export interface License { id: number; state: string; kind: string; licenseNumber: string; issuedDate: string; expiryDate: string; coverage: string; notes: string; tags: LicenseTag[]; createdAt?: string; }
 export interface AppSettings { theme: 'system' | 'light' | 'dark'; units: 'imperial' | 'metric'; defaultMapView: string; profileVisibility: Visibility; discoverable: boolean; notifyCampChat: boolean; notifyTrophyActivity: boolean; notifyStandActivity: boolean; notifyCommunity: boolean; notifyBadges: boolean; notifyWind: boolean; }
-export interface Badge { id: string; name: string; description: string; earned: boolean; current: number; target: number; }
+export interface Badge { id: string; name: string; description: string; earned: boolean; current: number; target: number; earnedAt?: string | null; }
 export interface CommunityGroup { id: number; name: string; state: string; description: string; createdBy: string; createdByUserId: string; imageUrl: string; memberCount: number; joined: boolean; createdAt?: string; }
 export interface CommunityGroupMember { id: number; userName: string; userId: string; isCreator: boolean; createdAt?: string; }
 export interface CommunityGroupDetail extends CommunityGroup { members: CommunityGroupMember[]; isCreator: boolean; }
@@ -34,7 +34,65 @@ export interface GoHuntScore { score: number; verdict: string; reason: string; b
 export interface HuntNowCamp { campId: number; campName: string; score?: number; verdict?: string; reason?: string; bestStandId?: number | null; bestStandName?: string | null; windCompass?: string; windSpeedMph?: number; tempF?: number; rutLabel?: string; unavailable?: boolean; stale?: boolean; detail?: string; }
 export interface SeasonRecap { season: string; startYear: number; inProgress: boolean; hasActivity: boolean; hunts: number; harvests: number; successRate: number; daysAfield: number; species: string[]; trophyPosts: number; likes: number; comments: number; seasonScore: number; biggestBuck: number | null; heaviestLbs: number | null; checkins: number; reservations: number; standsHunted: number; badgesEarned: { id: string; name: string }[]; photos: { id: number; campId: number; species: string; caption: string; imageUrl: string; createdAt: string }[]; availableSeasons: number[]; }
 export const HARVEST_CLASSES = ['', 'Buck', 'Doe', 'Turkey', 'Bear', 'Elk', 'Other'];
-export const BADGE_MEDALS: Record<string, string> = { founder: '🏅', first_doe: '🦌', camp_founder: '🏕️' };
+// Drawn badge glyphs (24x24, stroke style) — the same glyph shows on the
+// metallic earned medal (cream) and on the flat locked disc (sage). INK is
+// replaced with the ink colour for filled details.
+export const BADGE_GLYPHS: Record<string, string> = {
+  founder: '<path d="M6 21V4"/><path d="M6 5h11l-2.5 3.5L17 12H6"/>',
+  first_hunt: '<ellipse cx="12" cy="15.5" rx="4.2" ry="3.4"/><circle cx="5.6" cy="10.6" r="1.7"/><circle cx="9.3" cy="7.7" r="1.7"/><circle cx="13.9" cy="7.7" r="1.7"/><circle cx="17.7" cy="10.6" r="1.7"/>',
+  first_harvest: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.3" fill="INK" stroke="none"/>',
+  first_buck: '<path d="M10 21c0-5-1-8-3.5-10.5M6.5 10.5C5 9 4.5 6.5 5 4M6.5 10.5c1.5-1 2.1-3 1.9-5M14 21c0-5 1-8 3.5-10.5M17.5 10.5c1.5-1.5 2-4 1.5-6.5M17.5 10.5c-1.5-1-2.1-3-1.9-5"/>',
+  first_doe: '<path d="M8.5 3.5h7V10c0 2-.9 3-1.5 4.4l-.9 4.1a1.9 1.9 0 0 1-3.7 0L8.5 14.4C7.9 13 8.5 12 8.5 10Z"/><circle cx="10.4" cy="10.8" r="1.05" fill="INK" stroke="none"/><circle cx="13.6" cy="10.8" r="1.05" fill="INK" stroke="none"/>',
+  first_turkey: '<path d="M19.5 4.5C14 4.8 8.6 8.6 6.9 14.7L5 21"/><path d="M7.2 14.3c3.8-.3 7.3-2.4 9.6-5.6"/><path d="M9.4 12.6l3.8-.4M11.3 9.9l3.6-.5M13.4 7.5l3.3-.6"/>',
+  seasoned_hunter: '<path d="M12 3.5l2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2l-5.1 2.7L8 13.3 3.8 9.4l5.7-.7Z"/>',
+  full_freezer: '<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><circle cx="12" cy="12" r="1.6"/>',
+  camp_founder: '<path d="M12 4 22 20H2Z"/><path d="M12 12l4 8H8Z"/>',
+  trailblazer: '<path d="M4 20c5-1.5 6-4.5 6-8s2-6 10-7" stroke-dasharray="3 3.4"/><circle cx="4" cy="20" r="1.5" fill="INK" stroke="none"/><circle cx="20" cy="5" r="1.5" fill="INK" stroke="none"/>',
+  pathfinder: '<path d="M12 21s-6.5-5.6-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z"/><circle cx="12" cy="10.5" r="2.3"/>',
+  in_the_stand: '<path d="M9 3v18M15 3v18M9 8h6M9 13h6M9 18h6"/>',
+  planned_ahead: '<rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10.2h17M8 3.5v4M16 3.5v4"/><path d="M9 16.3l2.1 2.1 3.9-4"/>',
+  trophy_wall: '<path d="M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M7 5.2H4.6A2.4 2.4 0 0 0 6.9 9M17 5.2h2.4A2.4 2.4 0 0 1 17.1 9"/><path d="M12 14v2.5M8.5 20.5h7M10 16.5h4"/>',
+  campfire_voice: '<path d="M12 3.5c1.2 3.2-2.6 5-2.6 7.7a2.6 2.6 0 0 0 5.2 0c0-1-.5-1.9-1.1-2.7 2.1.9 3.7 2.9 3.7 5.3a5.2 5.2 0 0 1-10.4 0C6.8 8.6 11 6.7 12 3.5Z"/><path d="M4.5 20.8 19.5 18M4.5 18l15 2.8"/>',
+  good_company: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 20c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.6"/><path d="M15.6 15.3c2.3.2 4.1 1.8 4.7 4.2"/>',
+  veteran_hunter: '<path d="M12 3l7 2.5V11c0 4.8-3 8.4-7 10-4-1.6-7-5.2-7-10V5.5Z"/><path d="M9 11.5l2.2 2.2 4.3-4.2"/>',
+  deadeye: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.8"/><circle cx="12" cy="12" r="1.4" fill="INK" stroke="none"/>',
+  grand_slam: '<path d="M4 18.5 3 8l5.5 4L12 5l3.5 7L21 8l-1 10.5Z"/><path d="M4.5 21h15"/>',
+  cartographer: '<path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z"/><path d="M9 4v14M15 6v14"/><path d="M6.8 14.8c2.2-4.2 5-1.8 6.6-4.4" stroke-dasharray="2.4 2.6"/>',
+  trail_master: '<path d="M3 20c3-4.5 6-6 9-6s6 1.5 9 5"/><path d="M12 14V4"/><path d="M12 4h7l-2 2.8L19 9.6h-7"/>',
+  stand_regular: '<path d="M20 15.5A8.5 8.5 0 1 1 8.5 4a7 7 0 0 0 11.5 11.5Z"/>',
+  storyteller: '<path d="M12 6.5C10 4.8 6.8 4.2 4 4.8v13.5c2.8-.6 6-.1 8 1.7 2-1.8 5.2-2.3 8-1.7V4.8C17.2 4.2 14 4.8 12 6.5Z"/><path d="M12 6.5V20"/>',
+  crowd_favorite: '<path d="M12 20.5S4 15.3 4 9.6A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 8 2.6c0 5.7-8 10.9-8 10.9Z"/>',
+  inner_circle: '<circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="4.6" r="1.6"/><circle cx="18.4" cy="9.4" r="1.6"/><circle cx="16.1" cy="18" r="1.6"/><circle cx="7.9" cy="18" r="1.6"/><circle cx="5.6" cy="9.4" r="1.6"/>',
+};
+function starburstPoints(spikes = 24, outer = 49, inner = 44.5): string {
+  const pts: string[] = [];
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (Math.PI * i) / spikes - Math.PI / 2;
+    pts.push(`${(50 + r * Math.cos(a)).toFixed(1)},${(50 + r * Math.sin(a)).toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
+// The award medallion as an SVG string: earned badges are glossy metallic
+// medals (gold for Founder, bronze for the rest) with a beaded ring,
+// starburst seal and ribbon tails; locked badges are flat dark discs with
+// a dashed ring and a lock chip. Matches the Muse app's badge design.
+export function badgeMedalSvg(id: string, earned: boolean, mini = false): string {
+  const glyph = BADGE_GLYPHS[id] ?? BADGE_GLYPHS.founder;
+  if (!earned) {
+    const g = glyph.replaceAll('INK', '#9db09a');
+    return `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="#243527"/><circle cx="50" cy="50" r="38.5" fill="none" stroke="#51644f" stroke-width="1.6" stroke-dasharray="4.5 4.5"/><g transform="translate(33.5,33.5) scale(1.375)" fill="none" stroke="#9db09a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${g}</g><g transform="translate(74,74)"><circle r="12.5" fill="#10190f" stroke="#3d4f3c"/><path d="M-4 1.5V-1.8a4 4 0 0 1 8 0v3.3" fill="none" stroke="#cfd8cc" stroke-width="1.8"/><rect x="-6" y="1" width="12" height="9.5" rx="2" fill="#cfd8cc"/><circle cy="5.5" r="1.4" fill="#10190f"/></g></svg>`;
+  }
+  const gold = id === 'founder';
+  const face = gold ? ['#ffedb0', '#f6c945', '#d29a26'] : ['#f2c184', '#c08a44', '#8a5a26'];
+  const seal = gold ? '#c9932f' : '#7c4a21';
+  const ring = gold ? '#8a5a13' : '#5f3c17';
+  const beads = gold ? 'rgba(255,246,205,.95)' : 'rgba(255,232,196,.9)';
+  const gid = `bgm-${id}-${gold ? 'g' : 'b'}`;
+  const g = glyph.replaceAll('INK', '#fff7e0');
+  const ribbons = mini ? '' : '<path d="M34 70h15l-3.5 38-5.8-6.2L34 108Z" fill="#a33327"/><path d="M51 70h15l3.5 38-5.8-6.2L57 108Z" fill="#8e2b20"/>';
+  return `<svg viewBox="0 0 100 ${mini ? 100 : 116}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="${gid}" cx="38%" cy="30%" r="85%"><stop offset="0%" stop-color="${face[0]}"/><stop offset="55%" stop-color="${face[1]}"/><stop offset="100%" stop-color="${face[2]}"/></radialGradient></defs>${ribbons}<polygon points="${starburstPoints()}" fill="${seal}"/><circle cx="50" cy="50" r="39" fill="url(#${gid})" stroke="${ring}" stroke-width="1.6"/><circle cx="50" cy="50" r="34.5" fill="none" stroke="${beads}" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="0.1 5.03"/><circle cx="50" cy="50" r="30.5" fill="none" stroke="rgba(90,55,10,.45)" stroke-width="1"/><ellipse cx="36" cy="31" rx="19" ry="11" fill="#ffffff" opacity="0.16"/><g transform="translate(33.5,33.5) scale(1.375)" fill="none" stroke="#fff7e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${g}</g></svg>`;
+}
 export function badgeEmoji(id: string): string {
   const map: Record<string, string> = {
     first_hunt: '🎯', first_harvest: '🦌', first_buck: '🦌', first_doe: '🦌', first_turkey: '🦃',

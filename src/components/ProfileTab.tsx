@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { AppSettings, Badge, Friend, FriendRequest, GearItem, License, Profile, Visibility } from '../types';
-import { INTEREST_PRESETS, US_STATES, badgeEmoji } from '../types';
+import { INTEREST_PRESETS, US_STATES } from '../types';
+import BadgeMedal from './BadgeMedal';
+import TeardropPin from './TeardropPin';
 import { containsBadLanguage, BAD_LANGUAGE_WARNING } from '../lib/profanity';
 import { GearTab } from './SimpleTabs';
 import SettingsPage from './SettingsPage';
 import { HERO_DAWN } from '../assets/heroDawn';
 
 type SubTab = 'friends' | 'licenses' | 'gear' | 'badges';
+
+function fmtEarnedDate(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00');
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 export default function ProfileTab({ profile, friends, gear, settings, onProfileChanged, onFriendsChanged, onSettingsChanged }: {
   profile: Profile; friends: Friend[]; gear: GearItem[]; settings: AppSettings;
@@ -127,7 +135,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
               {profile.displayName || 'Hunter'}
               {pinned.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
-                  {pinned.map(id => <span key={id} title={badges.find(b => b.id === id)?.name ?? id} className="pinned-medal">{badgeEmoji(id)}</span>)}
+                  {pinned.map(id => <span key={id} title={badges.find(b => b.id === id)?.name ?? id} style={{ display: 'inline-flex', marginRight: 4 }}><BadgeMedal id={id} earned mini size={30} /></span>)}
                 </span>
               )}
             </h2>
@@ -325,15 +333,18 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
 
       {sub === 'badges' && (
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Badges ({earnedCount} of 25 earned)</h2>
-          <p className="muted">Badges are earned automatically from your real activity. Tap one to see it — pin up to 3 beside your name.</p>
+          <div className="row">
+            <h2 className="grow" style={{ marginTop: 0 }}>Badges</h2>
+            <span className="pill orange">{earnedCount} of 25 earned</span>
+          </div>
+          <p className="muted">Earned by hunting, harvesting, working your camps — and being here early. Tap a badge to see how it's earned, and pin up to 3 earned badges to show them beside your name.</p>
           <div className="badge-grid">
             {badges.map(b => (
               <button key={b.id} className={`badge-cell ${b.earned ? 'earned' : 'locked'}`} onClick={() => setBadgePop(b)}>
-                <span className="badge-medal">{badgeEmoji(b.id)}</span>
+                <BadgeMedal id={b.id} earned={b.earned} size={92} />
                 <span className="badge-name">{b.name}</span>
-                <span className="badge-prog">{b.earned ? 'Earned' : `${b.current}/${b.target}`}</span>
-                {pinned.includes(b.id) && <span className="badge-pin" title="Pinned beside your name">📌</span>}
+                <span className="badge-prog">{b.earned ? (fmtEarnedDate(b.earnedAt) ?? 'Earned') : 'Locked'}</span>
+                {pinned.includes(b.id) && <span className="badge-pin2" title="Pinned beside your name"><TeardropPin type="other" color="#ffffff" size={10} /></span>}
               </button>
             ))}
           </div>
@@ -343,10 +354,10 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
       {badgePop && (
         <div className="sheet" onClick={() => setBadgePop(null)}>
           <div className="sheet-inner" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 6px' }}><span className={`badge-medal badge-medal-lg ${badgePop.earned ? '' : 'medal-locked'}`}>{badgeEmoji(badgePop.id)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 6px' }}><BadgeMedal id={badgePop.id} earned={badgePop.earned} size={120} /></div>
             <h2 style={{ margin: '8px 0 4px' }}>{badgePop.name}</h2>
             <p>{badgePop.description}</p>
-            <p className="muted">{badgePop.earned ? 'Earned' : `Progress: ${badgePop.current} of ${badgePop.target}`}</p>
+            <p className="muted">{badgePop.earned ? `Earned${fmtEarnedDate(badgePop.earnedAt) ? ` ${fmtEarnedDate(badgePop.earnedAt)}` : ''}` : `Not earned yet · Progress: ${badgePop.current} of ${badgePop.target}`}</p>
             {badgePop.earned && (
               <button className="btn primary grow" style={{ width: '100%' }} onClick={() => togglePin(badgePop)}>
                 {pinned.includes(badgePop.id) ? 'Unpin from my name' : pinned.length >= 3 ? 'Already 3 pinned — unpin one first' : 'Pin beside my name'}

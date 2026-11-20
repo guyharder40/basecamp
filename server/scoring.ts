@@ -8,12 +8,19 @@ export interface BadgeDef {
   check: (a: Activity) => boolean;
   progress: (a: Activity) => { current: number; target: number };
 }
+export interface ActivityDates {
+  hunts: string[]; harvests: string[]; bucks: string[]; does: string[]; turkeys: string[];
+  pins: string[]; trails: string[]; checkins: string[]; messages: string[]; photos: string[];
+  friends: string[]; camps: string[]; reservations: string[];
+  thirdSpeciesDate: string | null;
+}
 export interface Activity {
   hunts: number; harvests: number; bucks: number; does: number; turkeys: number;
   species: string[]; pins: number; trails: number; checkins: number;
   chatMessages: number; trophyLikesReceived: number; friends: number;
   campsCreated: number; reservations: number; trophyPosts: number;
   accountCreatedAt: string; // ISO date of first sign-in / profile creation
+  dates: ActivityDates;
 }
 
 export const FOUNDER_CUTOFF_DEFAULT = '2027-11-14';
@@ -51,11 +58,46 @@ export const BADGE_DEFS: BadgeDef[] = [
   { id: 'inner_circle', name: 'Inner Circle', description: 'Have 5 friends.', check: a => a.friends >= 5, progress: a => prog(a.friends, 5) },
 ];
 
-export interface BadgeResult { id: string; name: string; description: string; earned: boolean; current: number; target: number; }
+export interface BadgeResult { id: string; name: string; description: string; earned: boolean; current: number; target: number; earnedAt: string | null; }
+// The date a badge was earned is the date of the record that reached its
+// target — the nth dated record for that kind of activity. Likes carry no
+// timestamps in the schema, so Crowd Favorite has no derivable date.
+function nth(dates: string[], n: number): string | null {
+  if (!dates || dates.length < n) return null;
+  return [...dates].sort()[n - 1] ?? null;
+}
+const EARNED_DATE: Record<string, (a: Activity) => string | null> = {
+  first_hunt: a => nth(a.dates.hunts, 1),
+  seasoned_hunter: a => nth(a.dates.hunts, 10),
+  veteran_hunter: a => nth(a.dates.hunts, 25),
+  first_harvest: a => nth(a.dates.harvests, 1),
+  full_freezer: a => nth(a.dates.harvests, 5),
+  deadeye: a => nth(a.dates.harvests, 10),
+  first_buck: a => nth(a.dates.bucks, 1),
+  first_doe: a => nth(a.dates.does, 1),
+  first_turkey: a => nth(a.dates.turkeys, 1),
+  grand_slam: a => a.dates.thirdSpeciesDate,
+  camp_founder: a => nth(a.dates.camps, 1),
+  trailblazer: a => nth(a.dates.photos, 1),
+  trophy_wall: a => nth(a.dates.photos, 5),
+  pathfinder: a => nth(a.dates.pins, 1),
+  cartographer: a => nth(a.dates.pins, 10),
+  trail_master: a => nth(a.dates.trails, 5),
+  in_the_stand: a => nth(a.dates.checkins, 1),
+  stand_regular: a => nth(a.dates.checkins, 10),
+  planned_ahead: a => nth(a.dates.reservations, 1),
+  campfire_voice: a => nth(a.dates.messages, 10),
+  storyteller: a => nth(a.dates.messages, 25),
+  good_company: a => nth(a.dates.friends, 3),
+  inner_circle: a => nth(a.dates.friends, 5),
+  founder: a => a.accountCreatedAt || null,
+  crowd_favorite: () => null,
+};
 export function computeBadges(a: Activity): BadgeResult[] {
   return BADGE_DEFS.map(d => {
     const p = d.progress(a);
-    return { id: d.id, name: d.name, description: d.description, earned: d.check(a), current: p.current, target: p.target };
+    const earned = d.check(a);
+    return { id: d.id, name: d.name, description: d.description, earned, current: p.current, target: p.target, earnedAt: earned ? (EARNED_DATE[d.id]?.(a) ?? null) : null };
   });
 }
 

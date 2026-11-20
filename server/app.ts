@@ -806,7 +806,11 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
   const myCPosts = sinceIso ? myCPostsAll.filter(p => inRangeDate(toIso(p.createdAt))) : myCPostsAll;
   const species = new Set<string>();
   let bucks = 0, does = 0, turkeys = 0;
-  const harvestOf = (cls: string, sp: string, caption?: string) => {
+  // Dated harvest events drive the badges' earned dates. Each event is one
+  // harvest — a harvested hunt, or a trophy post (a post is itself a
+  // harvest record) — classified exactly as the counts classify it.
+  const harvestEvents: { date: string; kind: 'buck' | 'doe' | 'turkey' | null; species: string }[] = [];
+  const harvestOf = (cls: string, sp: string, caption: string | undefined, date: string) => {
     // A trophy photo is itself a harvest record. When no harvest class was
     // filled in, infer doe/buck/turkey from the post's own caption
     // (e.g. "Doe - 2025") — that is how the live app awards First Doe.
@@ -816,23 +820,34 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
       else if (/buck/i.test(caption)) c = 'buck';
       else if (/turkey|gobbler/i.test(caption)) c = 'turkey';
     }
-    if (c === 'buck' || c.includes('buck')) bucks++;
-    else if (c === 'doe' || c.includes('doe')) does++;
-    else if (c === 'turkey' || c.includes('turkey') || c.includes('gobbler') || sp.toLowerCase().includes('turkey')) turkeys++;
+    let kind: 'buck' | 'doe' | 'turkey' | null = null;
+    if (c === 'buck' || c.includes('buck')) { bucks++; kind = 'buck'; }
+    else if (c === 'doe' || c.includes('doe')) { does++; kind = 'doe'; }
+    else if (c === 'turkey' || c.includes('turkey') || c.includes('gobbler') || sp.toLowerCase().includes('turkey')) { turkeys++; kind = 'turkey'; }
     if (sp) species.add(sp);
+    harvestEvents.push({ date, kind, species: sp });
   };
-  for (const h of harvested) harvestOf('', h.species ?? '');
-  for (const p of [...myPhotos, ...myCPosts]) harvestOf(p.harvestClass ?? '', p.species ?? '', p.caption ?? '');
+  for (const h of harvested) harvestOf('', h.species ?? '', undefined, h.date);
+  for (const p of [...myPhotos, ...myCPosts]) harvestOf(p.harvestClass ?? '', p.species ?? '', p.caption ?? '', toIso(p.createdAt).slice(0, 10));
+  harvestEvents.sort((x, y) => x.date.localeCompare(y.date));
+  const seenSpecies = new Set<string>();
+  let thirdSpeciesDate: string | null = null;
+  for (const e of harvestEvents) {
+    if (e.species) {
+      seenSpecies.add(e.species);
+      if (seenSpecies.size >= 3 && !thirdSpeciesDate) thirdSpeciesDate = e.date;
+    }
+  }
   // Season-scoped calls count only in-season harvests.
   const harvestedIn = sinceIso ? harvested.filter(h => h.date >= sinceIso.slice(0, 10) && h.date <= (untilIso ?? '9999').slice(0, 10)) : harvested;
-  const pins = await db.all('SELECT id FROM pins');
-  const trails = await db.all('SELECT id FROM trails');
+  const pins = await db.all<any>('SELECT createdAt FROM pins');
+  const trails = await db.all<any>('SELECT createdAt FROM trails');
   const checkins = await db.all<any>('SELECT * FROM checkins');
   const messages = await db.all<any>('SELECT * FROM messages');
   const myMessages = messages.filter(m => (uid && sameAccount(m.authorUserId, uid)) || m.authorName === myName || m.authorName === myName.split(' ')[0]);
-  const friends = await db.all('SELECT id FROM friends');
-  const camps = await db.all('SELECT id FROM camps');
-  const reservations = await db.all('SELECT id FROM reservations');
+  const friends = await db.all<any>('SELECT createdAt FROM friends');
+  const camps = await db.all<any>('SELECT createdAt FROM camps');
+  const reservations = await db.all<any>('SELECT createdAt FROM reservations');
   let likesReceived = 0;
   for (const p of myPhotos) {
     const l = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM photo_likes WHERE photoId = ?', [p.id]);
@@ -843,6 +858,7 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
     likesReceived += Number(l?.c ?? 0);
   }
   const profile = await db.get<any>('SELECT createdAt FROM profile WHERE id = 1');
+  const d10 = (v: unknown) => (v ? toIso(v as string).slice(0, 10) : '');
   return {
     hunts: huntsIn.length, harvests: harvestedIn.length + myPhotos.length + myCPosts.length, bucks, does, turkeys,
     species: [...species], pins: pins.length, trails: trails.length,
@@ -851,6 +867,22 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
     campsCreated: camps.length, reservations: reservations.length,
     trophyPosts: myPhotos.length + myCPosts.length,
     accountCreatedAt: profile?.createdAt ? toIso(profile.createdAt).slice(0, 10) : '2026-11-13',
+    dates: {
+      hunts: huntsIn.map(h => h.date).filter(Boolean),
+      harvests: harvestEvents.map(e => e.date).filter(Boolean),
+      bucks: harvestEvents.filter(e => e.kind === 'buck').map(e => e.date),
+      does: harvestEvents.filter(e => e.kind === 'doe').map(e => e.date),
+      turkeys: harvestEvents.filter(e => e.kind === 'turkey').map(e => e.date),
+      pins: pins.map(r => d10(r.createdAt)).filter(Boolean),
+      trails: trails.map(r => d10(r.createdAt)).filter(Boolean),
+      checkins: checkins.map(r => d10(r.checkedInAt)).filter(Boolean),
+      messages: myMessages.map(r => d10(r.createdAt)).filter(Boolean),
+      photos: [...myPhotos, ...myCPosts].map(p => d10(p.createdAt)).filter(Boolean),
+      friends: friends.map(r => d10(r.createdAt)).filter(Boolean),
+      camps: camps.map(r => d10(r.createdAt)).filter(Boolean),
+      reservations: reservations.map(r => d10(r.createdAt)).filter(Boolean),
+      thirdSpeciesDate,
+    },
   };
 }
 app.get('/api/badges', wrap(async (req, res, db) => {
