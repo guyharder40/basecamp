@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { AppSettings, CampDetail, CampMessage, CampNote, Checkin, Friend, GoHuntScore, Photo, Pin, Profile, Reservation, WindData } from '../types';
-import { PIN_COLORS, PIN_TYPES, WIND_DIRS, fmtDistanceUnits, fmtSpeed, fmtTempF, fmtTime, pinSymbol, pinTypeLabel, trailDistanceFt } from '../types';
+import { PIN_COLORS, PIN_TYPES, WIND_DIRS, fmtDistanceUnits, fmtSpeed, fmtTempF, fmtTime, pinTypeLabel, trailDistanceFt } from '../types';
+import TeardropPin from './TeardropPin';
 import { containsBadLanguage, BAD_LANGUAGE_WARNING } from '../lib/profanity';
 import MapView from './MapView';
 import { HarvestChips, HarvestForm, TrophyCardButton } from './TrophyCardSheet';
@@ -215,7 +216,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
         />
         {selectedPin && (
           <div className="card" style={{ marginTop: 8, marginBottom: 0 }}>
-            <div className="row"><span style={{ fontSize: 22 }}>{pinSymbol(selectedPin.pinType)}</span><strong className="grow">{selectedPin.name}</strong><span className="pill">{pinTypeLabel(selectedPin.pinType)}</span></div>
+            <div className="row"><TeardropPin type={selectedPin.pinType} color={selectedPin.color} size={24} /><strong className="grow">{selectedPin.name}</strong><span className="pill">{pinTypeLabel(selectedPin.pinType)}</span></div>
             <p className="muted">{selectedPin.lat.toFixed(5)}, {selectedPin.lng.toFixed(5)}{selectedPin.notes ? ` · ${selectedPin.notes}` : ''}</p>
             {selectedPin.bestWinds.length > 0 && <p>Best winds: <span className="best-wind">{selectedPin.bestWinds.join(' · ')}</span></p>}
             <div className="row">
@@ -225,14 +226,13 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
           </div>
         )}
         <h3>Pin symbols in this camp</h3>
-        <div className="row-wrap">{PIN_TYPES.map(t => <span key={t.type} className="pill">{t.symbol} {t.label}</span>)}</div>
+        <div className="row-wrap">{PIN_TYPES.map(t => <span key={t.type} className="pill"><TeardropPin type={t.type} color={t.color} size={13} /> {t.label}</span>)}</div>
         <h3>Pins ({pins.length})</h3>
         {pins.length === 0 && <p className="muted">No pins yet. Press and hold the map, or tap + Add a pin.</p>}
         {pins.map(pin => (
           <div key={pin.id} className={`listrow ${selectedPin?.id === pin.id ? 'selected' : ''}`} style={{ borderRadius: 8, padding: '8px 6px' }} onClick={() => setSelectedPin(pin)}>
-            <span style={{ fontSize: 20 }}>{pinSymbol(pin.pinType)}</span>
+            <TeardropPin type={pin.pinType} color={pin.color} size={22} />
             <span className="grow"><strong>{pin.name}</strong> <span className="muted">· {pinTypeLabel(pin.pinType)}</span><br /><span className="small">{pin.bestWinds.length > 0 ? <span className="best-wind">Best winds: {pin.bestWinds.join(' · ')}</span> : ''}{pin.notes ? ` · ${pin.notes}` : ''}</span></span>
-            <span style={{ width: 16, height: 16, borderRadius: '50%', background: pin.color, flex: 'none' }} />
             <button className="btn small" onClick={e => { e.stopPropagation(); setPinSheet({ mode: 'edit', pin }); }}>Edit</button>
           </div>
         ))}
@@ -311,7 +311,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
                 const good = goodToday.has(p.id);
                 return (
                   <button key={p.id} className={`chip ${isSel ? 'on selected' : ''} ${!good && wind ? 'dimmed' : ''}`} disabled={occupied && activeCheckins.find(c => c.pinId === p.id)?.userName !== myName} onClick={() => setStandId(p.id)}>
-                    {pinSymbol(p.pinType)} {p.name}{good ? ' · Good for today’s wind' : ''}{isSel ? ' · Selected' : ''}{occupied ? ' · Occupied' : ''}
+                    <TeardropPin type={p.pinType} color={p.color} size={14} /> {p.name}{good ? ' · Good for today’s wind' : ''}{isSel ? ' · Selected' : ''}{occupied ? ' · Occupied' : ''}
                   </button>
                 );
               })}
@@ -353,7 +353,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
                 const good = goodToday.has(p.id);
                 return (
                   <button key={p.id} className={`chip ${resStandId === p.id ? 'on selected' : ''} ${!good && wind ? 'dimmed' : ''}`} disabled={taken} onClick={() => setResStandId(p.id)}>
-                    {pinSymbol(p.pinType)} {p.name}{good ? ' · Good for today’s wind' : ''}{resStandId === p.id ? ' · Selected' : ''}{taken ? ' · Booked' : ''}
+                    <TeardropPin type={p.pinType} color={p.color} size={14} /> {p.name}{good ? ' · Good for today’s wind' : ''}{resStandId === p.id ? ' · Selected' : ''}{taken ? ' · Booked' : ''}
                   </button>
                 );
               })}
@@ -617,24 +617,37 @@ export function PinSheet({ sheet, onClose, onSaved, campId }: { sheet: { mode: '
   return (
     <div className="sheet" onClick={onClose}>
       <div className="sheet-inner" onClick={e => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>{sheet.mode === 'edit' ? `Pin settings: ${pin?.name ?? ''}` : 'Drop a pin here?'}</h2>
-        <p className="muted">{lat.toFixed(5)}, {lng.toFixed(5)}</p>
-        <label>Name</label>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. North Ridge Stand" />
-        <label>Pin type</label>
-        <div className="symbol-grid">
+        <label style={{ marginTop: 0 }}>Pin name — shows on the map</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. North ridge stand" />
+        <p className="small">This name appears next to the pin on the map when Pin names are on.<br />{lat.toFixed(5)}, {lng.toFixed(5)}</p>
+        <div className="pin-preview">
+          <TeardropPin type={type} color={color} size={40} />
+          <span><strong>{pinTypeLabel(type)}</strong><br /><span className="muted">{pinTypeLabel(type)} symbol · preview of how it looks on the map</span></span>
+        </div>
+        <label>Pin type — pick its symbol</label>
+        <div className="type-grid">
           {PIN_TYPES.map(t => (
-            <button key={t.type} className={type === t.type ? 'on selected' : ''} onClick={() => setType(t.type)}>{t.symbol}<br />{t.label}</button>
+            <button key={t.type} className={`type-row ${type === t.type ? 'on' : ''}`} onClick={() => { setType(t.type); if (sheet.mode === 'create') setColor(t.color); }}>
+              <TeardropPin type={t.type} color={t.color} size={26} />
+              {t.label}
+              {type === t.type && <span className="tick">✓</span>}
+            </button>
           ))}
         </div>
-        <label>Color</label>
-        <div className="row">
-          <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: 48 }} />
-          <div className="swatches">{PIN_COLORS.map(c => <button key={c} className={`swatch ${color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={c} />)}</div>
+        <p className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+          <TeardropPin type={type} color={color} size={20} />
+          <span><strong>{pinTypeLabel(type)}</strong> symbol — this is how it will look on the map, with its name next to it.</span>
+        </p>
+        <label>Pin color</label>
+        <div className="swatches">{PIN_COLORS.map(c => <button key={c} className={`swatch ${color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setColor(c)} aria-label={c} />)}</div>
+        <div className="row" style={{ marginTop: 10 }}>
+          <span className="swatch-static" style={{ background: color }} />
+          <span className="grow">Custom</span>
+          <input type="color" className="color-box" value={color} onChange={e => setColor(e.target.value)} />
         </div>
         {isStand && (
           <>
-            <label>Best winds — tap the directions this stand works best in</label>
+            <label>Best winds for this {type === 'blind' ? 'blind' : 'stand'} — tap all that apply</label>
             <div className="compass">
               {WIND_DIRS.map(d => <button key={d} className={winds.includes(d) ? 'on selected' : ''} onClick={() => setWinds(prev => prev.includes(d) ? prev.filter(w => w !== d) : [...prev, d])}>{d}</button>)}
             </div>

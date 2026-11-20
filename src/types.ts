@@ -1,5 +1,5 @@
 export type Visibility = 'public' | 'friends' | 'private';
-export type PinType = 'stand' | 'camera' | 'parking' | 'water' | 'foodplot' | 'blind' | 'cabin' | 'feeder' | 'harvest';
+export type PinType = 'stand' | 'camera' | 'parking' | 'water' | 'foodplot' | 'blind' | 'cabin' | 'feeder' | 'harvest' | 'other';
 export type Session = 'morning' | 'afternoon' | 'evening' | 'all_day';
 export interface Profile { firstName: string; lastName: string; displayName: string; status: string; bio: string; email: string; emailVisibility: Visibility; phone: string; phoneVisibility: Visibility; interests: string[]; huntingState: string; avatarUrl?: string; bannerUrl?: string; pinnedBadges?: string[]; discoverable?: boolean; profileVisibility?: Visibility; createdAt?: string; ownerUserId?: string; }
 export interface Friend { id: number; name: string; email?: string; phone?: string; notes?: string; createdAt?: string; }
@@ -52,23 +52,45 @@ export function fmtDistanceUnits(ft: number, units: 'imperial' | 'metric'): stri
   return fmtDistance(ft);
 }
 export interface CampDetail { camp: Camp; members: CampMember[]; pins: Pin[]; trails: Trail[]; }
-export const PIN_TYPES: { type: PinType; label: string; symbol: string }[] = [
-  { type: 'stand', label: 'Stand', symbol: '🪜' },
-  { type: 'camera', label: 'Trail camera', symbol: '📷' },
-  { type: 'parking', label: 'Parking / gate', symbol: 'P' },
-  { type: 'water', label: 'Water', symbol: '💧' },
-  { type: 'foodplot', label: 'Food plot', symbol: '🌱' },
-  { type: 'blind', label: 'Blind', symbol: '⛺' },
-  { type: 'cabin', label: 'Cabin', symbol: '🏠' },
-  { type: 'feeder', label: 'Feeder', symbol: '🌾' },
-  { type: 'harvest', label: 'Harvest', symbol: '🎯' },
+// Pin types in the Muse app's order, each with its signature colour — the
+// colour its symbol pin carries in the type picker.
+export const PIN_TYPES: { type: PinType; label: string; color: string }[] = [
+  { type: 'stand', label: 'Stand', color: '#C2702E' },
+  { type: 'blind', label: 'Blind', color: '#8A5A33' },
+  { type: 'cabin', label: 'Camp / cabin', color: '#2E4034' },
+  { type: 'water', label: 'Water', color: '#3F7FBF' },
+  { type: 'foodplot', label: 'Food plot', color: '#5D7D4F' },
+  { type: 'parking', label: 'Parking / gate', color: '#7D8B74' },
+  { type: 'feeder', label: 'Feeder', color: '#C9932F' },
+  { type: 'camera', label: 'Trail camera', color: '#7B4FA6' },
+  { type: 'harvest', label: 'Harvest site', color: '#C23B2E' },
+  { type: 'other', label: 'Other', color: '#4A4A48' },
 ];
-export const PIN_COLORS = ['#C2702E', '#16A34A', '#2563EB', '#DC2626', '#7C3AED', '#0891B2', '#CA8A04', '#111827'];
+// White line glyphs drawn inside the teardrop head (24x24 box, stroke white).
+export const PIN_GLYPHS: Record<PinType, string> = {
+  stand: '<path d="M9 3v18M15 3v18M9 8h6M9 13h6M9 18h6"/>',
+  blind: '<path d="M12 4 22 20H2Z"/><path d="M12 13l3.5 7h-7Z"/>',
+  cabin: '<path d="M4 11 12 4l8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
+  water: '<path d="M12 3c0 0-6.5 7.2-6.5 11a6.5 6.5 0 0 0 13 0C18.5 10.2 12 3 12 3Z"/>',
+  foodplot: '<path d="M12 21v-8"/><path d="M12 13c0-4-3-6.5-8-6.5 0 4.5 3 7 8 6.5Z"/><path d="M12 10c0-3.5 2.5-5.5 7-5.5 0 4-2.5 6-7 5.5Z"/>',
+  parking: '<text x="12" y="17.5" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" stroke="none">P</text>',
+  feeder: '<path d="M5 4h14l-2.5 6h-9Z"/><path d="M9.5 10 8 20M14.5 10 16 20"/><path d="M6.5 20h11"/>',
+  camera: '<rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="12" cy="13" r="3.4"/><path d="M8.5 7 10 4.5h4L15.5 7"/>',
+  harvest: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.3" fill="#fff" stroke="none"/>',
+  other: '<circle cx="12" cy="12" r="4" fill="#fff" stroke="none"/>',
+};
+// The teardrop pin as an SVG string — used for the map markers (Leaflet
+// divIcon HTML) and, through the TeardropPin component, everywhere in the UI.
+export function teardropSvg(type: PinType, color: string, selected = false): string {
+  const glyph = PIN_GLYPHS[type] ?? PIN_GLYPHS.other;
+  return `<svg viewBox="0 0 64 72" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><path d="M32 3C19.3 3 9 13.1 9 25.5 9 42.5 32 69 32 69s23-26.5 23-43.5C55 13.1 44.7 3 32 3Z" fill="${color}" stroke="${selected ? '#C2702E' : '#FFFFFF'}" stroke-width="${selected ? 4.5 : 3}"/><g transform="translate(21.4,14.9) scale(0.88)" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${glyph}</g></svg>`;
+}
+export function pinTypeColor(type: PinType): string { return PIN_TYPES.find(p => p.type === type)?.color ?? '#C2702E'; }
+export const PIN_COLORS = ['#C2702E', '#C23B2E', '#5D7D4F', '#3F7FBF', '#7B4FA6', '#C9932F', '#2F8F86', '#D1608C', '#3C4043', '#8A6D3B'];
 export const WIND_DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 export const INTEREST_PRESETS = ['Rifle Hunting', 'Bow Hunting', 'Crossbow', 'Muzzleloader', 'Shotgun Hunting', 'Turkey', 'Waterfowl', 'Whitetail Deer', 'Elk', 'Mule Deer', 'Bear', 'Small Game', 'Upland Birds', 'Predator Hunting', 'Fishing', 'Trapping', 'Archery', 'Long Range', 'Hunting Dogs', 'Trail Cameras', 'Food Plots', 'Land Management'];
 export const GEAR_CATEGORIES = ['Weapon', 'Ammo', 'Optics', 'Clothing', 'Calls', 'Tree Stand', 'Blind', 'Pack', 'Knife & Tools', 'Safety', 'Other'];
 export const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
-export function pinSymbol(type: PinType): string { return PIN_TYPES.find(p => p.type === type)?.symbol ?? '📍'; }
 export function pinTypeLabel(type: PinType): string { return PIN_TYPES.find(p => p.type === type)?.label ?? type; }
 export function fmtDate(iso: string): string { try { return new Date(iso).toLocaleDateString(); } catch { return iso; } }
 export function fmtTime(iso: string): string { try { return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return iso; } }

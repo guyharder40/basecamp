@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import type { Camp, Pin, Trail, TrailPoint } from '../types';
-import { PIN_COLORS, pinSymbol, trailDistanceFt, fmtDistance } from '../types';
+import { PIN_COLORS, teardropSvg, trailDistanceFt, fmtDistance } from '../types';
 
 export type MapStyle = 'streets' | 'satellite' | 'topo' | 'dark' | 'grayscale';
 const STYLES: { id: MapStyle; label: string }[] = [
@@ -221,8 +221,8 @@ export default function MapView({ camp, pins, trails, selectedPinId, onSelectPin
     layer.clearLayers();
     pins.forEach(pin => {
       const isSel = selectedPinId === pin.id;
-      const html = `<div class="pin-marker" data-pin-id="${pin.id}"><span class="badge" style="background:${pin.color};${isSel ? 'box-shadow:0 0 0 3px #C2702E;' : ''}"><span class="badge-glyph">${pinSymbol(pin.pinType)}</span></span>${showLabels ? `<span class="nametag">${esc(pin.name || pin.label)}</span>` : ''}</div>`;
-      const icon = L.divIcon({ html, className: '', iconSize: [30, showLabels ? 54 : 32], iconAnchor: [15, 30] });
+      const html = `<div class="pin-marker" data-pin-id="${pin.id}"><span class="pin-svg">${teardropSvg(pin.pinType, pin.color, isSel)}</span>${showLabels ? `<span class="nametag">${esc(pin.name || pin.label)}</span>` : ''}</div>`;
+      const icon = L.divIcon({ html, className: '', iconSize: [34, showLabels ? 62 : 40], iconAnchor: [17, 38] });
       const marker = L.marker([pin.lat, pin.lng], { icon });
       marker.on('click', () => { suppressClick.current = Date.now(); onSelectPin(pin); });
       marker.addTo(layer);
@@ -317,12 +317,24 @@ export default function MapView({ camp, pins, trails, selectedPinId, onSelectPin
         </div>
         <button className="btn small map-fs-btn" onClick={() => setFullscreen(v => !v)}>{fullscreen ? 'Exit fullscreen' : 'Full screen'}</button>
         {hold && (
-          <div className="hold-chooser" style={{ left: hold.x, top: hold.y }}>
-            <h4>Pin or trail here?</h4>
-            <button onClick={() => { onAddPinAt(hold.lat, hold.lng); setHold(null); }}>Place a pin</button>
-            <button onClick={() => { setHold(null); setMode('draw'); setDrawTool('draw'); setDrawPoints([]); }}>Draw a trail</button>
-            <button onClick={() => { setHold(null); setMode('gps'); setGpsPoints([]); setGpsStart(null); }}>Walk with GPS</button>
-            <button onClick={() => setHold(null)}>✕ Close</button>
+          <div className="hold-chooser">
+            <div className="hc-head">
+              <strong>Pin or trail?</strong>
+              <span className="muted grow">{hold.lat.toFixed(5)}, {hold.lng.toFixed(5)}</span>
+              <button className="hc-x" aria-label="Close" onClick={() => setHold(null)}>✕</button>
+            </div>
+            <button className="hc-row" onClick={() => { onAddPinAt(hold.lat, hold.lng); setHold(null); }}>
+              <span className="hc-ic" dangerouslySetInnerHTML={{ __html: teardropSvg('stand', '#C2702E') }} />
+              Place a pin
+            </button>
+            <button className="hc-row" onClick={() => { setHold(null); setMode('draw'); setDrawTool('draw'); setDrawPoints([]); }}>
+              <span className="hc-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></span>
+              Draw a trail
+            </button>
+            <button className="hc-row" onClick={() => { setHold(null); setMode('gps'); setGpsPoints([]); setGpsStart(null); }}>
+              <span className="hc-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg></span>
+              Walk with GPS
+            </button>
           </div>
         )}
       </div>

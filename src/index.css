@@ -69,13 +69,15 @@ label { font-size:12px; font-weight:700; letter-spacing:.07em; text-transform:up
 .map-toolbar .btn { background:var(--card); box-shadow:0 1px 4px rgba(0,0,0,.25); }
 .map-fs-btn { position:absolute; top:8px; right:8px; z-index:500; background:rgba(16,26,19,.85) !important; color:#f4edda !important; border-color:transparent !important; box-shadow:0 1px 5px rgba(0,0,0,.35); }
 .pin-marker { text-align:center; }
-.pin-marker .badge { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:50% 50% 50% 4px; transform:rotate(-45deg); color:#fff; font-size:15px; font-weight:800; border:2px solid #fff; box-shadow:0 1px 5px rgba(0,0,0,.4); }
-.pin-marker .badge-glyph { transform:rotate(45deg); display:inline-block; }
+.pin-marker .pin-svg { display:block; width:34px; height:38px; margin:0 auto; filter:drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
 .pin-marker .nametag { display:inline-block; margin-top:2px; background:rgba(16,26,19,.88); border:1px solid transparent; border-radius:6px; padding:1px 6px; font-size:11px; font-weight:700; white-space:nowrap; color:#f4edda; }
-.hold-chooser { position:absolute; z-index:600; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.25); padding:8px; width:230px; }
-.hold-chooser h4 { margin:0 0 6px; font-size:14px; }
-.hold-chooser button { display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid var(--border); padding:8px 4px; font-size:14px; color:var(--text); }
-.hold-chooser button:last-child { border-bottom:none; }
+.hold-chooser { position:absolute; left:12px; right:12px; bottom:12px; z-index:600; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:16px; box-shadow:0 8px 28px rgba(0,0,0,.35); padding:12px; }
+.hc-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.hc-head strong { font-family:'Barlow Condensed', 'Barlow', sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:19px; }
+.hc-x { width:34px; height:34px; border-radius:50%; border:1px solid var(--border); background:var(--inset); color:var(--text); flex:none; font-size:14px; }
+.hc-row { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--inset); border:1px solid var(--border); border-radius:12px; padding:10px 12px; font-size:16px; font-weight:600; color:var(--text); margin-bottom:8px; }
+.hc-row:last-child { margin-bottom:0; }
+.hc-ic { width:22px; height:26px; display:inline-flex; align-items:center; justify-content:center; flex:none; color:var(--text); }
 .sheet { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; }
 .sheet-inner { background:var(--card); color:var(--text); width:100%; max-width:520px; max-height:88vh; overflow:auto; border-radius:20px 20px 0 0; padding:16px; }
 .sheet-inner h2 { font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:.02em; font-size:25px; }
@@ -220,3 +222,17 @@ textarea { resize:vertical; min-height:64px; }
 .species-pill { background:#8a5a33; color:#f7ead2; border-radius:999px; padding:2px 9px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; }
 .pill.open { background:#46684c; color:#eef3e4; border-color:transparent; }
 .checkrow.hide-check { text-transform:none; letter-spacing:0; font-size:15px; font-weight:500; color:var(--text); }
+
+/* Pin editor (matches the Muse app sheet) */
+.pin-preview { display:flex; gap:12px; align-items:center; background:var(--inset); border:1px solid var(--border); border-radius:14px; padding:10px 12px; margin:12px 0 4px; }
+.type-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.type-row { display:flex; align-items:center; gap:10px; border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:12px; padding:8px 10px; font-size:15px; font-weight:600; text-align:left; }
+.type-row.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.type-row .tick { margin-left:auto; color:var(--accent); font-weight:800; }
+.swatches { gap:10px; }
+.swatch { width:38px; height:38px; border:2px solid rgba(255,255,255,.9); outline:1px solid rgba(0,0,0,.15); }
+.swatch.on { border-color:transparent; box-shadow:0 0 0 3px #fff, 0 0 0 4px rgba(0,0,0,.2); transform:scale(1.12); }
+.swatch-static { width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.9); outline:1px solid rgba(0,0,0,.15); flex:none; }
+input.color-box { width:56px; height:38px; flex:none; padding:2px; border-radius:10px; }
+.compass button.on { background:var(--cream); color:#1d2a20; border-color:transparent; }
+:root[data-theme="light"] .compass button.on { background:#1d2a20; color:var(--cream); }
