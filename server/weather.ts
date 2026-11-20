@@ -35,7 +35,7 @@ async function fetchJson(url: string, headers: Record<string, string> = {}): Pro
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), OM_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Basecamp (hunting app)', ...headers }, signal: ctrl.signal });
+    const res = await fetch(url, { headers: { 'User-Agent': 'Basecamp (hunting app, +https://basecamp-xakz.vercel.app)', ...headers }, signal: ctrl.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally { clearTimeout(t); }
@@ -134,24 +134,49 @@ async function fetchNws(lat: number, lng: number): Promise<WindSnapshot> {
   };
 }
 
+function firstSuccess<T>(promises: Promise<T>[]): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let remaining = promises.length;
+    const errors: string[] = [];
+    promises.forEach((p, i) => {
+      p.then(resolve, (e: unknown) => {
+        errors[i] = e instanceof Error ? e.message : String(e);
+        remaining -= 1;
+        if (remaining === 0) reject(new Error(`All weather sources failed: ${errors.filter(Boolean).join('; ')}`));
+      });
+    });
+  });
+}
+
 export async function fetchWind(lat: number, lng: number): Promise<WindSnapshot> {
-  const chain = (async (): Promise<WindSnapshot> => {
+  // Race both providers and take the first success. Open-Meteo is a single
+  // fast fetch, so it wins whenever it is healthy; if a shared egress IP is
+  // rate-limited there (HTTP 429 from a cloud host), the National Weather
+  // Service still answers and the hunt score keeps working.
+  const om = (async (): Promise<WindSnapshot> => {
     try { return await fetchOpenMeteo(lat, lng); }
-    catch (e) { console.warn('Open-Meteo failed, trying NWS:', e instanceof Error ? e.message : e); }
-    return fetchNws(lat, lng);
+    catch (e) {
+      console.warn('Open-Meteo failed, retrying once:', e instanceof Error ? e.message : e);
+      await new Promise(r => setTimeout(r, 600));
+      return fetchOpenMeteo(lat, lng);
+    }
   })();
+  const nws = (async (): Promise<WindSnapshot> => fetchNws(lat, lng))();
+  const first = firstSuccess([om, nws]);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const budget = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => reject(new Error('Weather request timed out')), WEATHER_TIMEOUT_MS);
   });
   try {
-    return await Promise.race([chain, budget]);
+    return await Promise.race([first, budget]);
   } finally {
     if (timer) clearTimeout(timer);
-    // The losing chain keeps running in the background until its own
-    // per-fetch timeouts fire; its result is discarded. Swallow any late
-    // rejection so it never surfaces as an unhandled rejection.
-    chain.catch(() => {});
+    // Losing chains keep running until their own per-fetch timeouts fire;
+    // their results are discarded. Swallow any late rejections so they
+    // never surface as unhandled rejections.
+    first.catch(() => {});
+    om.catch(() => {});
+    nws.catch(() => {});
   }
 }
 

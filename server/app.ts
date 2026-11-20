@@ -867,7 +867,7 @@ app.get('/api/camps/:id/wind', wrap(async (req, res, db) => {
       matchingStandNames: matching.map(s => s.name),
     });
   } catch (e) {
-    res.status(502).json({ error: 'Weather is unavailable right now. Try again in a bit.' });
+    res.status(502).json({ error: 'Weather is unavailable right now. Try again in a bit. (' + (e instanceof Error ? e.message : String(e)) + ')' });
   }
 }));
 app.get('/api/camps/:id/go-hunt', wrap(async (req, res, db) => {
@@ -881,7 +881,7 @@ app.get('/api/camps/:id/go-hunt', wrap(async (req, res, db) => {
     const score = scoreGoHunt({ wind, stands, huntingState: (profile as any)?.huntingState ?? '' });
     res.json({ campId: camp.id, campName: (camp as any).name, wind, stale: wind.stale ?? false, score });
   } catch (e) {
-    res.status(502).json({ error: 'Weather is unavailable right now. Try again in a bit.' });
+    res.status(502).json({ error: 'Weather is unavailable right now. Try again in a bit. (' + (e instanceof Error ? e.message : String(e)) + ')' });
   }
 }));
 app.get('/api/hunt-now', wrap(async (_req, res, db) => {
@@ -896,7 +896,7 @@ app.get('/api/hunt-now', wrap(async (_req, res, db) => {
       const stands = pins.map((p: any) => ({ id: p.id, name: p.name || p.label, bestWinds: parseJson(p.bestWinds, []) }));
       const score = scoreGoHunt({ wind, stands, huntingState: (profile as any)?.huntingState ?? '' });
       results.push({ campId: (camp as any).id, campName: (camp as any).name, score: score.score, verdict: score.verdict, reason: score.reason, bestStandId: score.bestStandId, bestStandName: score.bestStandName, windCompass: wind.currentCompass, windSpeedMph: wind.currentSpeedMph, tempF: wind.currentTempF, rutLabel: score.rutLabel, stale: wind.stale ?? false });
-    } catch { results.push({ campId: (camp as any).id, campName: (camp as any).name, unavailable: true }); }
+    } catch (e) { results.push({ campId: (camp as any).id, campName: (camp as any).name, unavailable: true, detail: e instanceof Error ? e.message : String(e) }); }
   }
   results.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   res.json({ best: results[0] ?? null, camps: results });

@@ -115,11 +115,11 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
     <div className="content">
       <div className="card">
         <div className="banner" style={{ backgroundImage: `url(${profile.bannerUrl || HERO_DAWN})` }} />
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: -32, paddingLeft: 8, paddingRight: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: -32, paddingLeft: 8, paddingRight: 2, position: 'relative', zIndex: 1 }}>
           <div className="avatar" style={{ border: '3px solid var(--cream)' }}>{(profile.displayName || 'H').charAt(0)}</div>
           <span className="grow" />
           {!editing && <button className="btn small" onClick={startEdit}>Edit profile</button>}
-          {!editing && <button className="icon-btn" aria-label="Settings" onClick={() => setShowSettings(true)}>⚙</button>}
+          {!editing && <button className="icon-btn" aria-label="Settings" onClick={() => setShowSettings(true)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg></button>}
         </div>
         <div style={{ marginTop: 10 }}>
           <div className="row">

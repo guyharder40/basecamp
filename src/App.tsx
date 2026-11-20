@@ -263,6 +263,7 @@ export default function App() {
                 {best && best.unavailable && (
                   <div>
                     <p>Weather is unavailable right now for {best.campName}.</p>
+                    {best.detail && <p className="small" style={{ color: '#f19a90' }}>{best.detail}</p>}
                     <button className="btn" onClick={() => { setHuntNow(null); api.getHuntNow().then(setHuntNow).catch(e => setHuntNowErr(e instanceof Error ? e.message : 'Weather is unavailable right now.')); }}>Try again</button>
                   </div>
                 )}
