@@ -49,6 +49,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
   const [invitePhone, setInvitePhone] = useState('');
   const [locLat, setLocLat] = useState('');
   const [locLng, setLocLng] = useState('');
+  const [showLoc, setShowLoc] = useState(false);
   const [locZoom, setLocZoom] = useState('14');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
@@ -146,31 +147,36 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
 
   return (
     <div className="content">
-      <button className="btn ghost" onClick={onBack}>← All camps</button>
+      <button className="back-link" onClick={onBack}>← All camps</button>
+      <div className="page-head" style={{ paddingTop: 6 }}>
+        <h1>Camp detail</h1>
+        <p>Map, pins, trails, chat, trophies, and crew — all inside this camp.</p>
+      </div>
       {msg && <p className="okmsg">{msg}</p>}
       {error && <p className="err">{error}</p>}
-      <div className="card" style={{ marginTop: 8 }}>
+      <div className="card">
         <h2>{camp.name}</h2>
-        <p className="muted">{camp.location} · {camp.acres} acres</p>
-        <div className="row-wrap">
-          <span className="pill">Share code: {camp.shareCode}</span>
-          {isOwner && <span className="pill orange">You own this camp</span>}
-          <button className="btn small" onClick={() => { navigator.clipboard?.writeText(camp.shareCode).catch(() => undefined); flash('Share code copied.'); }}>Copy invite</button>
-          {isOwner && <button className="btn small danger" onClick={async () => { if (window.confirm(`Delete ${camp.name} and everything in it?`)) { await api.deleteCamp(camp.id); onCampsChanged(); onBack(); } }}>Delete camp</button>}
+        <p className="muted" style={{ marginTop: 0 }}>{camp.location} · {camp.acres} acres</p>
+        <div className="share-box">
+          <span className="share-label">Share code</span>
+          <span className="share-code">{camp.shareCode}</span>
         </div>
+        <div className="row-wrap" style={{ marginTop: 10 }}>
+          <button className="btn primary" onClick={() => { navigator.clipboard?.writeText(camp.shareCode).catch(() => undefined); flash('Share code copied.'); }}>Copy invite</button>
+          {isOwner && <span className="pill orange">You own this camp</span>}
+          {isOwner && <button className="btn danger" onClick={async () => { if (window.confirm(`Delete ${camp.name} and everything in it?`)) { await api.deleteCamp(camp.id); onCampsChanged(); onBack(); } }}>Delete camp</button>}
+        </div>
+        <p className="small" style={{ marginBottom: 0 }}>Anyone with the code can join and help build this camp.</p>
       </div>
 
-      {!mapFullscreen && (
-        <nav className="jump-tabs" aria-label="Camp sections">
-          {JUMP_TABS.map(t => (
-            <button key={t.id} className={activeSection === t.id ? 'on' : ''} onClick={() => jumpTo(t.id)}>{t.label}</button>
-          ))}
-        </nav>
-      )}
-
-      <div className="card" ref={el => { sectionRefs.current.map = el; }}>
-        <h3>Location</h3>
-        <p className="muted">Map location set: {camp.centerLat.toFixed(5)}, {camp.centerLng.toFixed(5)} · zoom {camp.mapZoom}</p>
+      <div className="card">
+        <div className="row">
+          <span className="check-circle">✓</span>
+          <span className="grow"><strong>Map location set</strong><br /><span className="small">{camp.centerLat.toFixed(5)}, {camp.centerLng.toFixed(5)} · zoom {camp.mapZoom}</span></span>
+          <button className="btn small" onClick={() => setShowLoc(v => !v)}>{showLoc ? 'Close' : 'Change location'}</button>
+        </div>
+        {showLoc && (
+        <div style={{ marginTop: 10 }}>
         <div className="row">
           <input value={locLat} onChange={e => setLocLat(e.target.value)} placeholder="Latitude" inputMode="decimal" />
           <input value={locLng} onChange={e => setLocLng(e.target.value)} placeholder="Longitude" inputMode="decimal" />
@@ -183,7 +189,17 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
             navigator.geolocation.getCurrentPosition(pos => { setLocLat(String(pos.coords.latitude)); setLocLng(String(pos.coords.longitude)); }, () => setError('Could not get your location. Allow location access and try again.'));
           }}>Use my location</button>
         </div>
+        </div>
+        )}
       </div>
+
+      {!mapFullscreen && (
+        <nav className="jump-tabs" aria-label="Camp sections">
+          {JUMP_TABS.map(t => (
+            <button key={t.id} className={activeSection === t.id ? 'on' : ''} onClick={() => jumpTo(t.id)}>{t.label}</button>
+          ))}
+        </nav>
+      )}
 
       <div className="card" ref={el => { sectionRefs.current.map = el; }}>
         <h3>Camp map</h3>
@@ -201,7 +217,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
           <div className="card" style={{ marginTop: 8, marginBottom: 0 }}>
             <div className="row"><span style={{ fontSize: 22 }}>{pinSymbol(selectedPin.pinType)}</span><strong className="grow">{selectedPin.name}</strong><span className="pill">{pinTypeLabel(selectedPin.pinType)}</span></div>
             <p className="muted">{selectedPin.lat.toFixed(5)}, {selectedPin.lng.toFixed(5)}{selectedPin.notes ? ` · ${selectedPin.notes}` : ''}</p>
-            {selectedPin.bestWinds.length > 0 && <p>Best winds: <strong>{selectedPin.bestWinds.join(', ')}</strong></p>}
+            {selectedPin.bestWinds.length > 0 && <p>Best winds: <span className="best-wind">{selectedPin.bestWinds.join(' · ')}</span></p>}
             <div className="row">
               <button className="btn grow" onClick={() => setPinSheet({ mode: 'edit', pin: selectedPin })}>Edit pin</button>
               <button className="btn" onClick={() => setSelectedPin(null)}>Close</button>
@@ -215,7 +231,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
         {pins.map(pin => (
           <div key={pin.id} className={`listrow ${selectedPin?.id === pin.id ? 'selected' : ''}`} style={{ borderRadius: 8, padding: '8px 6px' }} onClick={() => setSelectedPin(pin)}>
             <span style={{ fontSize: 20 }}>{pinSymbol(pin.pinType)}</span>
-            <span className="grow"><strong>{pin.name}</strong> <span className="muted">· {pinTypeLabel(pin.pinType)}</span><br /><span className="small">{pin.bestWinds.length > 0 ? `Best winds: ${pin.bestWinds.join(', ')}` : ''}{pin.notes ? ` · ${pin.notes}` : ''}</span></span>
+            <span className="grow"><strong>{pin.name}</strong> <span className="muted">· {pinTypeLabel(pin.pinType)}</span><br /><span className="small">{pin.bestWinds.length > 0 ? <span className="best-wind">Best winds: {pin.bestWinds.join(' · ')}</span> : ''}{pin.notes ? ` · ${pin.notes}` : ''}</span></span>
             <span style={{ width: 16, height: 16, borderRadius: '50%', background: pin.color, flex: 'none' }} />
             <button className="btn small" onClick={e => { e.stopPropagation(); setPinSheet({ mode: 'edit', pin }); }}>Edit</button>
           </div>
@@ -300,7 +316,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
                 );
               })}
             </div>
-            {selectedStand && selectedStand.bestWinds.length > 0 && <p className="small">Best winds for {selectedStand.name}: <strong>{selectedStand.bestWinds.join(', ')}</strong></p>}
+            {selectedStand && selectedStand.bestWinds.length > 0 && <p className="small">Best winds for {selectedStand.name}: <span className="best-wind">{selectedStand.bestWinds.join(' · ')}</span></p>}
             <label>Note (optional)</label>
             <input value={standNote} onChange={e => setStandNote(e.target.value)} placeholder="e.g. Evening sit" />
             {containsBadLanguage(standNote) && <p className="err">{BAD_LANGUAGE_WARNING}</p>}
@@ -342,7 +358,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
                 );
               })}
             </div>
-            {resStand && resStand.bestWinds.length > 0 && <p className="small">Best winds for {resStand.name}: <strong>{resStand.bestWinds.join(', ')}</strong></p>}
+            {resStand && resStand.bestWinds.length > 0 && <p className="small">Best winds for {resStand.name}: <span className="best-wind">{resStand.bestWinds.join(' · ')}</span></p>}
             <label>Note for the crew (optional)</label>
             <input value={resNote} onChange={e => setResNote(e.target.value)} placeholder="e.g. First sit of the season" />
             {containsBadLanguage(resNote) && <p className="err">{BAD_LANGUAGE_WARNING}</p>}
@@ -518,7 +534,7 @@ function PhotoCard({ photo, campId, campName, myName, broken, onBroken, onChange
   const badComment = containsBadLanguage(comment);
   const isMine = photo.authorName === myName;
   return (
-    <div style={{ borderTop: '1px solid #eee', paddingTop: 12, marginTop: 12 }}>
+    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 12 }}>
       <p><span className="small">{fmtTime(photo.createdAt)}</span> · <span className="pill">{photo.species}</span></p>
       <div className="feed-img-wrap" onClick={() => setFull(true)} style={{ cursor: 'pointer' }}>
         {broken || !photo.imageUrl || photo.imageUrl.startsWith('./blobs/') ? (

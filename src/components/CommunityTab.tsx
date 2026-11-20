@@ -49,6 +49,7 @@ export default function CommunityTab({ profile }: { profile: Profile }) {
   const [photoData, setPhotoData] = useState('');
   const [harvest, setHarvest] = useState<{ harvestClass: string; weightLbs: number | null; antlerScore: number | null; antlerPoints: number | null }>({ harvestClass: '', weightLbs: null, antlerScore: null, antlerPoints: null });
   const [showHarvest, setShowHarvest] = useState(false);
+  const [showPost, setShowPost] = useState(false);
   const [editingPost, setEditingPost] = useState<CommunityPost | null>(null);
   const [busy, setBusy] = useState(false);
   const [fullPhoto, setFullPhoto] = useState<CommunityPost | null>(null);
@@ -111,7 +112,7 @@ export default function CommunityTab({ profile }: { profile: Profile }) {
     setBusy(true); setErr('');
     try {
       await api.postCommunity({ groupId: feedGroupId, species, caption: caption.trim(), imageUrl: photoData, ...harvest });
-      setPhotoData(''); setCaption(''); setHarvest({ harvestClass: '', weightLbs: null, antlerScore: null, antlerPoints: null }); setShowHarvest(false);
+      setPhotoData(''); setCaption(''); setHarvest({ harvestClass: '', weightLbs: null, antlerScore: null, antlerPoints: null }); setShowHarvest(false); setShowPost(false);
       await loadPosts(feedGroupId);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not post.'); }
     finally { setBusy(false); }
@@ -122,21 +123,24 @@ export default function CommunityTab({ profile }: { profile: Profile }) {
 
   return (
     <div className="content">
-      <div className="row" style={{ marginBottom: 8 }}>
-        <button className="btn" onClick={() => setPanelOpen(true)}>
-          Groups ({groups.length}){feedGroupId ? ` · ${feedName}` : ''}
-        </button>
-        <div className="subtabs grow">
-          <button className={view === 'feed' ? 'on' : ''} onClick={() => setView('feed')}>{feedLabel}</button>
-          <button className={view === 'leaderboard' ? 'on' : ''} onClick={() => setView('leaderboard')}>Leaderboard</button>
-        </div>
+      <div className="page-head">
+        <h1>Community</h1>
+        <p>Trophies from hunters beyond your camps — and groups to hunt alongside them.</p>
+      </div>
+      <div className="subtabs">
+        <button className={view === 'feed' ? 'on' : ''} onClick={() => setView('feed')}>{feedLabel}</button>
+        <button className={view === 'leaderboard' ? 'on' : ''} onClick={() => setView('leaderboard')}>Leaderboard</button>
+      </div>
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="btn grow" onClick={() => setPanelOpen(true)}>☰&nbsp; Groups ({groups.length}){feedGroupId ? ` · ${feedName}` : ''}</button>
+        {view === 'feed' && <button className="btn primary" onClick={() => setShowPost(v => !v)}>+ Post</button>}
       </div>
       {err && <p className="err">{err}</p>}
       {loading && <p>Loading Community…</p>}
 
-      {view === 'feed' && !loading && (
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>{feedLabel}</h2>
+      {view === 'feed' && !loading && showPost && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <h2 style={{ marginTop: 0 }}>Post a trophy{feedGroupId ? ` — ${feedLabel}` : ''}</h2>
           <label>Species</label>
           <select value={species} onChange={e => setSpecies(e.target.value)}>{SPECIES.map(s => <option key={s} value={s}>{s}</option>)}</select>
           <label>Your comment</label>
@@ -159,7 +163,11 @@ export default function CommunityTab({ profile }: { profile: Profile }) {
             <button className="btn primary grow" disabled={!photoData || badCaption || !caption.trim() || busy} onClick={postTrophy}>Post trophy</button>
           </div>
           {!caption.trim() && <p className="small">Add a comment to post your trophy.</p>}
-          {posts.length === 0 && <p className="muted" style={{ marginTop: 10 }}>No trophy posts in this feed yet.</p>}
+        </div>
+      )}
+      {view === 'feed' && !loading && (
+        <div>
+          {posts.length === 0 && <p className="muted" style={{ textAlign: 'center', marginTop: 26 }}>No posts yet.</p>}
           {posts.map(p => (
             <CommunityPostCard key={p.id} post={p} myName={myName} feedName={feedLabel} onChanged={() => loadPosts(feedGroupId)} onFull={() => setFullPhoto(p)} onEdit={() => setEditingPost(p)} />
           ))}
@@ -325,7 +333,7 @@ function CommunityPostCard({ post, myName, feedName, onChanged, onFull, onEdit }
   const badComment = containsBadLanguage(comment);
   const isMine = post.authorName === myName;
   return (
-    <div style={{ borderTop: '1px solid #eee', paddingTop: 12, marginTop: 12 }}>
+    <div className="card">
       <p><span className="small">{fmtTime(post.createdAt)}</span> · <span className="pill">{post.species}</span></p>
       <div className="feed-img-wrap" onClick={onFull} style={{ cursor: 'pointer' }}>
         {post.imageUrl && !post.imageUrl.startsWith('./blobs/') ? (

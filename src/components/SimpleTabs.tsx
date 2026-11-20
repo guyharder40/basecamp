@@ -65,23 +65,46 @@ export function HuntsTab({ hunts, camps, profile, onChanged }: { hunts: Hunt[]; 
   const [notes, setNotes] = useState('');
   const [err, setErr] = useState('');
   const badText = containsBadLanguage(notes) || containsBadLanguage(stand);
+  const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'harvests' | 'noluck'>('all');
   async function add() {
     setErr('');
-    try { await api.createHunt({ date, species, stand: stand || undefined, notes: notes || undefined, harvested, campId }); setNotes(''); setStand(''); setHarvested(false); onChanged(); }
+    try { await api.createHunt({ date, species, stand: stand || undefined, notes: notes || undefined, harvested, campId }); setNotes(''); setStand(''); setHarvested(false); setShowForm(false); onChanged(); }
     catch (e) { setErr(e instanceof Error ? e.message : 'Could not log hunt.'); }
   }
+  const harvestCount = hunts.filter(h => h.harvested).length;
+  const shownHunts = hunts.filter(h => filter === 'all' ? true : filter === 'harvests' ? !!h.harvested : !h.harvested);
   return (
     <div className="content">
+      <div className="page-head">
+        <h1>Hunt Log</h1>
+        <p>Every sit, stalk, and harvest — on the record.</p>
+      </div>
       <div className="card">
-        <h2>Hunt Log</h2>
-        {hunts.length === 0 && <p className="muted">No hunts logged yet.</p>}
-        {hunts.map(h => (
+        <div className="row">
+          <span className="grow muted">{hunts.length} hunt{hunts.length === 1 ? '' : 's'} · {harvestCount} harvest{harvestCount === 1 ? '' : 's'}</span>
+          <button className="btn primary" onClick={() => setShowForm(v => !v)}>+ Log hunt</button>
+        </div>
+        <div className="row-wrap" style={{ marginTop: 10 }}>
+          {([['all', 'All'], ['harvests', 'Harvests'], ['noluck', 'No luck']] as const).map(([id, label]) => (
+            <button key={id} className={`chip ${filter === id ? 'on' : ''}`} onClick={() => setFilter(id)}>{label}</button>
+          ))}
+        </div>
+        {shownHunts.length === 0 && (
+          <div className="empty-box" style={{ marginTop: 12 }}>
+            <div className="empty-title">Nothing here yet</div>
+            <p className="muted" style={{ margin: '4px 0 0' }}>Log your first hunt and it will show up here.</p>
+          </div>
+        )}
+        {shownHunts.map(h => (
           <div key={h.id} className="listrow">
             <span className="grow"><strong>{h.species}</strong> — {h.date}{h.harvested ? ' · Harvest' : ''}<br /><span className="small">{[h.stand, camps.find(c => c.id === h.campId)?.name, h.notes].filter(Boolean).join(' · ')}</span></span>
             <button className="btn small" onClick={async () => { await api.updateHunt(h.id, { harvested: !h.harvested }); onChanged(); }}>{h.harvested ? 'Unmark harvest' : 'Mark harvest'}</button>
             <button className="btn small danger" onClick={async () => { if (window.confirm('Delete this hunt log?')) { await api.deleteHunt(h.id); onChanged(); } }}>Delete</button>
           </div>
         ))}
+        {showForm && (
+        <div>
         <h3>Log a hunt</h3>
         <label>Date</label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />
@@ -102,6 +125,8 @@ export function HuntsTab({ hunts, camps, profile, onChanged }: { hunts: Hunt[]; 
         {badText && <p className="err">{BAD_LANGUAGE_WARNING}</p>}
         <div className="row" style={{ marginTop: 8 }}><button className="btn primary grow" disabled={badText} onClick={add}>Log hunt</button></div>
         {err && <p className="err">{err}</p>}
+        </div>
+        )}
       </div>
       <SeasonRecapPanel profile={profile} />
     </div>
@@ -127,10 +152,10 @@ export function MapsTab({ camps, onPinSheet, onTrailCreated }: {
   if (!camp) return <div className="content"><div className="card"><p>No camps yet. Create one on the Basecamp tab first.</p></div></div>;
   return (
     <div className="content" style={{ paddingBottom: 12 }}>
-      <select value={camp.id} onChange={e => setCampId(Number(e.target.value))} style={{ height: 36, borderRadius: 999, marginBottom: 8 }}>
+      <select value={camp.id} onChange={e => setCampId(Number(e.target.value))} style={{ height: 44, borderRadius: 999, marginBottom: 10, fontWeight: 600 }}>
         {camps.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
-      <div className="card" style={{ padding: 10 }}>
+      <div>
         <MapView
           camp={camp} pins={pins} trails={trails} selectedPinId={selectedPinId} slim
           onSelectPin={p => setSelectedPinId(p?.id ?? null)}
@@ -148,7 +173,6 @@ export function MapsTab({ camps, onPinSheet, onTrailCreated }: {
             </div>
           </div>
         )}
-        <p className="small">Pins and trails work here exactly like inside the camp. {trails.length > 0 && `Trails here: ${trails.map(t => t.name).join(', ')}`}</p>
       </div>
     </div>
   );

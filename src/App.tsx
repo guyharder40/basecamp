@@ -26,8 +26,9 @@ function Hero() {
   return (
     <header className="hero" style={{ backgroundImage: `url(${HERO_DAWN})`, backgroundSize: 'cover', backgroundPosition: 'center 32%', backgroundRepeat: 'no-repeat' }}>
       <div className="hero-text">
+        <div className="hero-eyebrow">All-in-one hunting HQ</div>
         <h1>Basecamp</h1>
-        <p>All-in-one hunting HQ</p>
+        <p>Build your camp together — map your pins and trails, then log hunts, check your maps, and keep gear ready.</p>
       </div>
     </header>
   );
@@ -195,7 +196,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <Hero />
       {authUnreachable && (
         <div className="content">
           <p className="err">Could not reach the Basecamp server to check sign-in status. If this deployment uses sign-in, it may be unavailable — check your connection and refresh. Showing the app without signing in for now.</p>
@@ -243,10 +243,15 @@ export default function App() {
       {signedIn && !needsProfile && !loading && !error && profile && (
         <>
           {tab === 'basecamp' && openCampId === null && (
+            <>
+            <Hero />
             <div className="content">
               {/* Hunt now strip — best place to hunt today, first thing seen */}
               <div className="card hunt-now">
-                <h2 style={{ marginTop: 0 }}>Hunt now</h2>
+                <div className="hunt-now-head">
+                  <h2>Hunt now</h2>
+                  <span className="dateline">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Live · {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                </div>
                 {huntNowErr && !best && <p className="err">{huntNowErr}</p>}
                 {!huntNow && !huntNowErr && <p className="muted">Scoring today’s camps…</p>}
                 {huntNow && !best && (
@@ -263,13 +268,21 @@ export default function App() {
                 )}
                 {best && !best.unavailable && (
                   <div>
-                    <p style={{ fontSize: 18, margin: '4px 0' }}><strong>{best.campName}</strong> — {best.score}/10 · {best.verdict}</p>
-                    <p className="muted" style={{ margin: '2px 0' }}>{best.reason}</p>
-                    <p style={{ margin: '6px 0' }}>
-                      Best stand: <strong>{best.bestStandName ?? '—'}</strong> · Wind {best.windCompass} {best.windSpeedMph != null ? fmtSpeed(best.windSpeedMph, settings.units) : ''} · {best.tempF != null ? fmtTempF(best.tempF, settings.units) : ''} · {best.rutLabel}
-                    </p>
-                    <div className="row-wrap">
-                      <button className="btn primary" onClick={() => setOpenCampId(best.campId)}>Open camp</button>
+                    <div className="hunt-now-body">
+                      <div className="score-circle"><span className="score-num">{best.score}</span><span className="score-of">OF 10</span></div>
+                      <div className="grow">
+                        <div className="verdict">{best.verdict} — at {best.campName}</div>
+                        <p className="muted" style={{ margin: 0 }}>{best.reason}</p>
+                      </div>
+                    </div>
+                    <div className="fact-chips">
+                      <span className="fact-chip">Wind {best.windCompass}{best.windSpeedMph != null ? ` · ${fmtSpeed(best.windSpeedMph, settings.units)}` : ''}</span>
+                      {best.tempF != null && <span className="fact-chip">Now {fmtTempF(best.tempF, settings.units)}</span>}
+                      {best.rutLabel && <span className="fact-chip">{best.rutLabel}</span>}
+                      {best.bestStandName && <span className="fact-chip">Best stand: {best.bestStandName}</span>}
+                    </div>
+                    <div className="row-wrap" style={{ marginTop: 12 }}>
+                      <button className="btn primary" onClick={() => setOpenCampId(best.campId)}>Open {best.campName} →</button>
                       {best.bestStandId && <button className="btn" disabled={busy} onClick={() => checkInToBest(best)}>Check in to {best.bestStandName}</button>}
                     </div>
                     {huntNow && huntNow.camps.length > 1 && (
@@ -284,16 +297,16 @@ export default function App() {
               </div>
               <div className="card">
                 <h2>Your camps</h2>
+                <p className="muted" style={{ marginTop: 0 }}>Every camp you've built or joined. Tap a camp to open it — its map, pins, trails, chat, and trophy feed live inside.</p>
                 {camps.length === 0 && <p className="muted">No camps yet. Create your first camp below — then invite your crew with the share code.</p>}
                 {camps.map(c => (
-                  <div key={c.id} className="listrow" style={{ cursor: 'pointer' }} onClick={() => setOpenCampId(c.id)}>
+                  <div key={c.id} className="camp-row" onClick={() => setOpenCampId(c.id)}>
                     <span className="grow">
-                      <strong>{c.name}</strong><br />
+                      <span className="camp-name">{c.name}</span><br />
                       <span className="small">{c.location} · {c.acres ? `${c.acres} acres · ` : ''}{c.memberCount ?? 1} member{(c.memberCount ?? 1) === 1 ? '' : 's'} · {c.pinCount ?? 0} pins</span><br />
-                      <span className="pill">Share code: {c.shareCode}</span>
+                      <span className="pill" style={{ marginTop: 4 }}>Share code: {c.shareCode}</span>
                     </span>
                     <span className="pill">{(c.pinCount ?? 0) > 0 ? 'Map set' : 'No map yet'}</span>
-                    <button className="btn small">Open camp</button>
                   </div>
                 ))}
                 <div className="row" style={{ marginTop: 10 }}>
@@ -324,6 +337,7 @@ export default function App() {
               </div>
               <HuntingCalendar profile={profile} onStateChange={async state => { await api.updateProfile({ huntingState: state }); setProfile(prev => prev ? { ...prev, huntingState: state } : prev); }} />
             </div>
+            </>
           )}
           {tab === 'basecamp' && openCampId !== null && (
             <CampDetail campId={openCampId} profile={profile} friends={friends} settings={settings} onBack={() => setOpenCampId(null)} onFriendsChanged={loadAll} onCampsChanged={loadAll} />

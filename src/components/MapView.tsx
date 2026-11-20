@@ -221,8 +221,8 @@ export default function MapView({ camp, pins, trails, selectedPinId, onSelectPin
     layer.clearLayers();
     pins.forEach(pin => {
       const isSel = selectedPinId === pin.id;
-      const html = `<div class="pin-marker" data-pin-id="${pin.id}"><span class="badge" style="background:${pin.color};${isSel ? 'box-shadow:0 0 0 3px #C2702E;' : ''}">${pinSymbol(pin.pinType)}</span>${showLabels ? `<span class="nametag">${esc(pin.name || pin.label)}</span>` : ''}</div>`;
-      const icon = L.divIcon({ html, className: '', iconSize: [30, showLabels ? 52 : 32], iconAnchor: [15, showLabels ? 26 : 16] });
+      const html = `<div class="pin-marker" data-pin-id="${pin.id}"><span class="badge" style="background:${pin.color};${isSel ? 'box-shadow:0 0 0 3px #C2702E;' : ''}"><span class="badge-glyph">${pinSymbol(pin.pinType)}</span></span>${showLabels ? `<span class="nametag">${esc(pin.name || pin.label)}</span>` : ''}</div>`;
+      const icon = L.divIcon({ html, className: '', iconSize: [30, showLabels ? 54 : 32], iconAnchor: [15, 30] });
       const marker = L.marker([pin.lat, pin.lng], { icon });
       marker.on('click', () => { suppressClick.current = Date.now(); onSelectPin(pin); });
       marker.addTo(layer);
@@ -303,7 +303,7 @@ export default function MapView({ camp, pins, trails, selectedPinId, onSelectPin
         )}
       </div>
       <div className={`map-wrap ${fullscreen ? 'fullscreen' : ''}`} ref={wrapRef}>
-        <div className="leaflet-holder" style={{ width: '100%', height: fullscreen ? '100%' : 300 }} />
+        <div className="leaflet-holder" style={{ width: '100%', height: fullscreen ? '100%' : slim ? 440 : 300 }} />
         <div className="map-toolbar">
           {mode === 'draw' && (
             <>
@@ -329,8 +329,8 @@ export default function MapView({ camp, pins, trails, selectedPinId, onSelectPin
       {!readOnly && (
         <div>
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="btn grow" onClick={() => { setMode('place-pin'); setHold(null); }}>+ Add a pin</button>
-            <button className="btn grow" onClick={() => setShowTrailOptions(v => !v)}>+ Add a trail</button>
+            <button className="btn primary grow" onClick={() => { setMode('place-pin'); setHold(null); }}>+ Add a pin</button>
+            <button className="btn primary grow" onClick={() => setShowTrailOptions(v => !v)}>+ Add a trail</button>
           </div>
           {showTrailOptions && (
             <div className="card" style={{ marginTop: 8 }}>

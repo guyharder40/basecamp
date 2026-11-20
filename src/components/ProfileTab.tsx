@@ -5,6 +5,7 @@ import { INTEREST_PRESETS, US_STATES, badgeEmoji } from '../types';
 import { containsBadLanguage, BAD_LANGUAGE_WARNING } from '../lib/profanity';
 import { GearTab } from './SimpleTabs';
 import SettingsPage from './SettingsPage';
+import { HERO_DAWN } from '../assets/heroDawn';
 
 type SubTab = 'friends' | 'licenses' | 'gear' | 'badges';
 
@@ -113,9 +114,12 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
   return (
     <div className="content">
       <div className="card">
-        <div className="banner" />
-        <div style={{ display: 'flex', marginTop: -32, paddingLeft: 8 }}>
-          <div className="avatar" style={{ border: '3px solid #fff' }}>{(profile.displayName || 'H').charAt(0)}</div>
+        <div className="banner" style={{ backgroundImage: `url(${profile.bannerUrl || HERO_DAWN})` }} />
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: -32, paddingLeft: 8, paddingRight: 2 }}>
+          <div className="avatar" style={{ border: '3px solid var(--cream)' }}>{(profile.displayName || 'H').charAt(0)}</div>
+          <span className="grow" />
+          {!editing && <button className="btn small" onClick={startEdit}>Edit profile</button>}
+          {!editing && <button className="icon-btn" aria-label="Settings" onClick={() => setShowSettings(true)}>⚙</button>}
         </div>
         <div style={{ marginTop: 10 }}>
           <div className="row">
@@ -127,11 +131,9 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
                 </span>
               )}
             </h2>
-            {!editing && <button className="btn small" onClick={startEdit}>Edit Profile</button>}
-            {!editing && <button className="btn small" aria-label="Settings" onClick={() => setShowSettings(true)}>⚙ Settings</button>}
           </div>
           <p className="status" style={{ margin: '4px 0 0' }}>{profile.status || 'No status set'}</p>
-          {profile.bio && <p>{profile.bio}</p>}
+          {profile.bio && <><div className="mini-label">About me</div><p style={{ margin: '2px 0 0' }}>{profile.bio}</p></>}
           {showContact && (
             <div className="row-wrap" style={{ marginTop: 8 }}>
               {profile.email && profile.emailVisibility === 'public' && <span className="pill">{profile.email}</span>}
@@ -177,19 +179,22 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
           <div>
             {msg && <p className="okmsg">{msg}</p>}
             <h3>Interests</h3>
-            {profile.interests.length === 0 ? <p className="muted">No interests added yet.</p> : <div className="row-wrap">{profile.interests.map(i => <span key={i} className="pill">{i}</span>)}</div>}
+            {profile.interests.length === 0 ? <p className="muted">No interests added yet.</p> : <div className="row-wrap">{profile.interests.map(i => <span key={i} className="interest-chip">{i}</span>)}</div>}
           </div>
         )}
       </div>
 
       <div className="subtabs" style={{ marginBottom: 10 }}>
         {([
-          ['friends', `Friends (${friends.length})`],
-          ['licenses', `Licenses & Tags (${licenses.length})`],
-          ['gear', `Gear (${gear.length})`],
-          ['badges', `Badges (${earnedCount}/25)`],
-        ] as [SubTab, string][]).map(([id, label]) => (
-          <button key={id} className={sub === id ? 'on' : ''} onClick={() => setSub(id)}>{label}</button>
+          ['friends', 'Friends', `${friends.length}`],
+          ['licenses', 'Licenses & Tags', `${licenses.reduce((n, l) => n + l.tags.filter(t => !t.filled).length, 0)} left`],
+          ['gear', 'Gear', `${gear.length} items`],
+          ['badges', 'Badges', `${earnedCount}/25`],
+        ] as [SubTab, string, string][]).map(([id, name, count]) => (
+          <button key={id} className={sub === id ? 'on' : ''} onClick={() => setSub(id)}>
+            <span>{name}</span>
+            <span className="subtab-count">{count}</span>
+          </button>
         ))}
       </div>
 
@@ -254,7 +259,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
             const days = l.expiryDate ? Math.round((new Date(l.expiryDate).getTime() - Date.now()) / 86400000) : null;
             const status = !l.expiryDate ? 'No expiry set' : days! < 0 ? 'Expired' : days! <= 30 ? `Expires in ${days} days` : 'Valid';
             return (
-              <div key={l.id} style={{ borderTop: '1px solid #eee', paddingTop: 10, marginTop: 10 }}>
+              <div key={l.id} style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10 }}>
                 <div className="row">
                   <span className="grow"><strong>{l.kind}</strong> · {l.state}<br /><span className="small">{l.licenseNumber}{l.coverage ? ` · ${l.coverage}` : ''}{l.notes ? ` · ${l.notes}` : ''}</span></span>
                   <span className={`pill ${status === 'Valid' ? '' : 'orange'}`}>{status}</span>
@@ -328,7 +333,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
                 <span className="badge-medal">{badgeEmoji(b.id)}</span>
                 <span className="badge-name">{b.name}</span>
                 <span className="badge-prog">{b.earned ? 'Earned' : `${b.current}/${b.target}`}</span>
-                {pinned.includes(b.id) && <span className="badge-pin">📌 Pinned</span>}
+                {pinned.includes(b.id) && <span className="badge-pin" title="Pinned beside your name">📌</span>}
               </button>
             ))}
           </div>
