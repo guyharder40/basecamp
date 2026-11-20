@@ -59,6 +59,24 @@ function remapRow(row: any): any {
   return out;
 }
 
+// Per-table column sets parsed from the schema. run() uses them to decide
+// whether an INSERT target actually has an `id` column: camp_wind_cache is
+// keyed by campId and has NO id, so appending RETURNING id to its inserts
+// throws `column "id" does not exist`. That is what silently killed the
+// weather on the deployed app — the fetch succeeded every time, but saving
+// the snapshot to the cache crashed, and the wind endpoints read that
+// crash as "weather unavailable".
+const PG_TABLE_COLUMNS: Record<string, Set<string>> = (() => {
+  const tables: Record<string, Set<string>> = {};
+  const re = /CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\);/g;
+  for (const m of POSTGRES_SCHEMA.matchAll(re)) {
+    const cols = new Set<string>();
+    for (const cm of m[2].matchAll(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:TEXT|INTEGER|BOOLEAN|JSONB|SERIAL|DOUBLE)\b/gm)) cols.add(cm[1].toLowerCase());
+    tables[m[1].toLowerCase()] = cols;
+  }
+  return tables;
+})();
+
 class SqliteDb implements Db {
   kind = 'sqlite' as const;
   private db: any;
@@ -97,7 +115,12 @@ class PostgresDb implements Db {
   async run(sql: string, params: unknown[] = []): Promise<RunResult> {
     const trimmed = sql.trim().toUpperCase();
     let q = toPg(sql);
-    if (trimmed.startsWith('INSERT') && !q.toUpperCase().includes('RETURNING')) q += ' RETURNING id';
+    if (trimmed.startsWith('INSERT') && !q.toUpperCase().includes('RETURNING')) {
+      const m = /INSERT\s+INTO\s+(\w+)/i.exec(sql);
+      const cols = m ? PG_TABLE_COLUMNS[m[1].toLowerCase()] : undefined;
+      // Only ask for the new id when the table has one (see PG_TABLE_COLUMNS).
+      if (!cols || cols.has('id')) q += ' RETURNING id';
+    }
     const r = await this.pool.query(q, params);
     return { lastInsertRowid: r.rows?.[0]?.id, changes: r.rowCount ?? 0 };
   }
