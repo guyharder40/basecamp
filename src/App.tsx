@@ -10,6 +10,7 @@ import AuthScreen from './components/AuthScreen';
 import { GearTab, HuntsTab, MapsTab } from './components/SimpleTabs';
 import { loadAuthConfig, getAuthConfig, getSession, subscribeAuth, signOut } from './lib/supabase';
 import { containsBadLanguage, BAD_LANGUAGE_WARNING } from './lib/profanity';
+import { HERO_DAWN } from './assets/heroDawn';
 
 type Tab = 'hunts' | 'maps' | 'basecamp' | 'community' | 'profile';
 const TABS: { id: Tab; label: string }[] = [
@@ -23,11 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = { theme: 'system', units: 'imperial', defa
 
 function Hero() {
   return (
-    <header className="hero">
-      <svg viewBox="0 0 520 110" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M0 70 L60 40 L120 62 L180 28 L250 60 L310 34 L380 66 L440 44 L520 68 L520 110 L0 110 Z" fill="#16301f" opacity="0.85" />
-        <path d="M0 88 L80 62 L160 84 L260 58 L340 86 L430 64 L520 88 L520 110 L0 110 Z" fill="#0f2418" />
-      </svg>
+    <header className="hero" style={{ backgroundImage: `url(${HERO_DAWN})`, backgroundSize: 'cover', backgroundPosition: 'center 32%', backgroundRepeat: 'no-repeat' }}>
       <div className="hero-text">
         <h1>Basecamp</h1>
         <p>All-in-one hunting HQ</p>

@@ -123,7 +123,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
               {profile.displayName || 'Hunter'}
               {pinned.length > 0 && (
                 <span style={{ marginLeft: 8 }}>
-                  {pinned.map(id => <span key={id} title={badges.find(b => b.id === id)?.name ?? id} style={{ fontSize: 20, marginRight: 4 }}>{badgeEmoji(id)}</span>)}
+                  {pinned.map(id => <span key={id} title={badges.find(b => b.id === id)?.name ?? id} className="pinned-medal">{badgeEmoji(id)}</span>)}
                 </span>
               )}
             </h2>
@@ -338,7 +338,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
       {badgePop && (
         <div className="sheet" onClick={() => setBadgePop(null)}>
           <div className="sheet-inner" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 64 }}>{badgeEmoji(badgePop.id)}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 6px' }}><span className={`badge-medal badge-medal-lg ${badgePop.earned ? '' : 'medal-locked'}`}>{badgeEmoji(badgePop.id)}</span></div>
             <h2 style={{ margin: '8px 0 4px' }}>{badgePop.name}</h2>
             <p>{badgePop.description}</p>
             <p className="muted">{badgePop.earned ? 'Earned' : `Progress: ${badgePop.current} of ${badgePop.target}`}</p>
