@@ -203,3 +203,20 @@ textarea { resize:vertical; min-height:64px; }
 
 /* Slim map switcher (Maps tab) */
 .map-switcher-slim .chip { padding:5px 11px; font-size:12.5px; }
+
+/* Hunting Calendar (matches the Muse app layout) */
+.checkrow { display:flex; align-items:center; gap:8px; font-weight:600; }
+.checkrow input { width:20px; height:20px; accent-color: var(--accent); }
+.cal-eyebrow { font-size:12px; letter-spacing:.18em; font-weight:700; color:#d8a45e; text-transform:uppercase; margin-bottom:2px; }
+.stat-tiles { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0 4px; }
+.stat-tile { background:var(--inset); border:1px solid var(--border); border-radius:14px; padding:12px 10px; text-align:center; }
+.stat-num { font-family:'Barlow Condensed', 'Barlow', sans-serif; font-size:30px; font-weight:700; line-height:1; color:var(--text); }
+.stat-label { font-size:11px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; margin-top:5px; font-weight:600; }
+.state-select { background:#ffffff; color:#1d2a20; border:1px solid var(--border); font-weight:600; font-size:16.5px; min-height:54px; border-radius:14px; }
+:root[data-theme="dark"] .state-select { background:var(--cream); border-color:transparent; }
+.next-opener { background:rgba(216,164,94,.13); border:1px solid rgba(216,164,94,.30); border-radius:14px; padding:12px 14px; margin-top:12px; }
+.month-label { font-size:12.5px; letter-spacing:.16em; font-weight:700; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:6px; margin:20px 0 10px; }
+.season-row { background:var(--inset); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+.species-pill { background:#8a5a33; color:#f7ead2; border-radius:999px; padding:2px 9px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; }
+.pill.open { background:#46684c; color:#eef3e4; border-color:transparent; }
+.checkrow.hide-check { text-transform:none; letter-spacing:0; font-size:15px; font-weight:500; color:var(--text); }

@@ -23,7 +23,7 @@ const AGENCIES: Record<string, { agency: string; url: string }> = {
   KY: { agency: 'Kentucky Dept. of Fish & Wildlife Resources', url: 'https://fw.ky.gov/' },
   LA: { agency: 'Louisiana Dept. of Wildlife & Fisheries', url: 'https://www.wlf.louisiana.gov/' },
   ME: { agency: 'Maine Dept. of Inland Fisheries & Wildlife', url: 'https://www.maine.gov/ifw/' },
-  MD: { agency: 'Maryland Dept. of Natural Resources', url: 'https://dnr.maryland.gov/' },
+  MD: { agency: 'Maryland DNR, Wildlife & Heritage Service', url: 'https://dnr.maryland.gov/' },
   MA: { agency: 'Massachusetts Division of Fisheries & Wildlife', url: 'https://www.mass.gov/orgs/division-of-fisheries-and-wildlife' },
   MI: { agency: 'Michigan Dept. of Natural Resources', url: 'https://www.michigan.gov/dnr/' },
   MN: { agency: 'Minnesota Dept. of Natural Resources', url: 'https://www.dnr.state.mn.us/' },
@@ -65,9 +65,10 @@ const DEFAULT: Season[] = [
 ];
 const OVERRIDES: Record<string, Season[]> = {
   MD: [
-    s('Deer', 'Archery', '2026-09-11', '2027-01-30'),
+    s('Deer', 'Archery', '2026-09-11', '2027-01-31'),
     s('Deer', 'Muzzleloader', '2026-10-15', '2026-10-17'),
-    s('Deer', 'Firearm', '2026-11-28', '2026-12-12'),
+    s('Bear', 'Black Bear', '2026-10-26', '2026-10-31'),
+    s('Deer', 'Firearms', '2026-11-28', '2026-12-12'),
     s('Deer', 'Muzzleloader (late)', '2026-12-18', '2026-12-19'),
     s('Turkey', 'Fall', '2026-10-31', '2026-11-07'),
     s('Turkey', 'Spring', '2027-04-17', '2027-05-22'),
