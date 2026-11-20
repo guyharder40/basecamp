@@ -1,0 +1,260 @@
+-- Basecamp schema (Postgres / Supabase). Run automatically on server start when DATABASE_URL is set.
+-- Rebuilt 2026-11-17 from the live Basecamp app. The old dead tables
+-- `spots` and `trips` are gone (the live app has no Spots or Trips tab).
+CREATE TABLE IF NOT EXISTS profile (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  ownerUserId TEXT NOT NULL DEFAULT 'seed-owner',
+  firstName TEXT NOT NULL DEFAULT '',
+  lastName TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  bio TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  emailVisibility TEXT NOT NULL DEFAULT 'private',
+  phone TEXT NOT NULL DEFAULT '',
+  phoneVisibility TEXT NOT NULL DEFAULT 'private',
+  interests JSONB NOT NULL DEFAULT '[]'::jsonb,
+  huntingState TEXT NOT NULL DEFAULT '',
+  avatarUrl TEXT NOT NULL DEFAULT '',
+  bannerUrl TEXT NOT NULL DEFAULT '',
+  pinnedBadges JSONB NOT NULL DEFAULT '[]'::jsonb,
+  discoverable BOOLEAN NOT NULL DEFAULT TRUE,
+  profileVisibility TEXT NOT NULL DEFAULT 'friends',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS friends (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS friend_requests (
+  id SERIAL PRIMARY KEY,
+  fromUserId TEXT NOT NULL DEFAULT '',
+  fromName TEXT NOT NULL DEFAULT '',
+  toUserId TEXT NOT NULL DEFAULT '',
+  toName TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS camps (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT '',
+  acres TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  shareCode TEXT NOT NULL UNIQUE,
+  ownerName TEXT NOT NULL DEFAULT '',
+  ownerUserId TEXT NOT NULL DEFAULT 'seed-owner',
+  centerLat DOUBLE PRECISION NOT NULL DEFAULT 39.0977,
+  centerLng DOUBLE PRECISION NOT NULL DEFAULT -76.6510,
+  mapZoom INTEGER NOT NULL DEFAULT 14,
+  mapView TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS camp_members (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'viewer',
+  joined BOOLEAN NOT NULL DEFAULT FALSE,
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  userId TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS pins (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  pinType TEXT NOT NULL DEFAULT 'stand',
+  color TEXT NOT NULL DEFAULT '#C2702E',
+  lat DOUBLE PRECISION NOT NULL,
+  lng DOUBLE PRECISION NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  bestWinds JSONB NOT NULL DEFAULT '[]'::jsonb,
+  createdBy TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS trails (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#C2702E',
+  points JSONB NOT NULL DEFAULT '[]'::jsonb,
+  distanceFt INTEGER NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS checkins (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  pinId INTEGER NOT NULL,
+  userName TEXT NOT NULL,
+  userId TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  checkedInAt TEXT NOT NULL,
+  checkedOutAt TEXT,
+  isActive BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE TABLE IF NOT EXISTS reservations (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  pinId INTEGER NOT NULL,
+  userName TEXT NOT NULL,
+  userId TEXT NOT NULL DEFAULT '',
+  date TEXT NOT NULL,
+  session TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS notes (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  authorName TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT '',
+  updatedAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS messages (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  authorName TEXT NOT NULL,
+  authorUserId TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS photos (
+  id SERIAL PRIMARY KEY,
+  campId INTEGER NOT NULL,
+  authorName TEXT NOT NULL,
+  authorUserId TEXT NOT NULL DEFAULT '',
+  species TEXT NOT NULL DEFAULT '',
+  caption TEXT NOT NULL DEFAULT '',
+  imageUrl TEXT NOT NULL DEFAULT '',
+  contentType TEXT NOT NULL DEFAULT 'image/jpeg',
+  harvestClass TEXT NOT NULL DEFAULT '',
+  weightLbs DOUBLE PRECISION,
+  antlerScore DOUBLE PRECISION,
+  antlerPoints INTEGER,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS photo_likes (
+  id SERIAL PRIMARY KEY,
+  photoId INTEGER NOT NULL,
+  userName TEXT NOT NULL,
+  UNIQUE (photoId, userName)
+);
+CREATE TABLE IF NOT EXISTS photo_comments (
+  id SERIAL PRIMARY KEY,
+  photoId INTEGER NOT NULL,
+  authorName TEXT NOT NULL,
+  body TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS gear (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Other',
+  brand TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  packed BOOLEAN NOT NULL DEFAULT FALSE,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS hunts (
+  id SERIAL PRIMARY KEY,
+  date TEXT NOT NULL,
+  species TEXT NOT NULL DEFAULT '',
+  stand TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  harvested BOOLEAN NOT NULL DEFAULT FALSE,
+  campId INTEGER,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS licenses (
+  id SERIAL PRIMARY KEY,
+  state TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT '',
+  licenseNumber TEXT NOT NULL DEFAULT '',
+  issuedDate TEXT NOT NULL DEFAULT '',
+  expiryDate TEXT NOT NULL DEFAULT '',
+  coverage TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS license_tags (
+  id SERIAL PRIMARY KEY,
+  licenseId INTEGER NOT NULL,
+  animal TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT '',
+  tagNumber TEXT NOT NULL DEFAULT '',
+  filled BOOLEAN NOT NULL DEFAULT FALSE,
+  filledDate TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS community_groups (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  createdBy TEXT NOT NULL DEFAULT '',
+  createdByUserId TEXT NOT NULL DEFAULT '',
+  imageUrl TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS community_group_members (
+  id SERIAL PRIMARY KEY,
+  groupId INTEGER NOT NULL,
+  userName TEXT NOT NULL,
+  userId TEXT NOT NULL DEFAULT '',
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS community_posts (
+  id SERIAL PRIMARY KEY,
+  groupId INTEGER,
+  authorName TEXT NOT NULL,
+  authorUserId TEXT NOT NULL DEFAULT '',
+  species TEXT NOT NULL DEFAULT '',
+  caption TEXT NOT NULL DEFAULT '',
+  imageUrl TEXT NOT NULL DEFAULT '',
+  harvestClass TEXT NOT NULL DEFAULT '',
+  weightLbs DOUBLE PRECISION,
+  antlerScore DOUBLE PRECISION,
+  antlerPoints INTEGER,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS community_post_likes (
+  id SERIAL PRIMARY KEY,
+  postId INTEGER NOT NULL,
+  userName TEXT NOT NULL,
+  UNIQUE (postId, userName)
+);
+CREATE TABLE IF NOT EXISTS community_post_comments (
+  id SERIAL PRIMARY KEY,
+  postId INTEGER NOT NULL,
+  authorName TEXT NOT NULL,
+  body TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS app_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  theme TEXT NOT NULL DEFAULT 'system',
+  units TEXT NOT NULL DEFAULT 'imperial',
+  defaultMapView TEXT NOT NULL DEFAULT 'streets',
+  profileVisibility TEXT NOT NULL DEFAULT 'friends',
+  discoverable BOOLEAN NOT NULL DEFAULT TRUE,
+  notifyCampChat BOOLEAN NOT NULL DEFAULT TRUE,
+  notifyTrophyActivity BOOLEAN NOT NULL DEFAULT TRUE,
+  notifyStandActivity BOOLEAN NOT NULL DEFAULT TRUE,
+  notifyCommunity BOOLEAN NOT NULL DEFAULT TRUE,
+  notifyBadges BOOLEAN NOT NULL DEFAULT TRUE,
+  notifyWind BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE TABLE IF NOT EXISTS camp_wind_cache (
+  campId INTEGER PRIMARY KEY,
+  payload TEXT NOT NULL DEFAULT '{}',
+  fetchedAt TEXT NOT NULL DEFAULT ''
+);
+DROP TABLE IF EXISTS spots;
+DROP TABLE IF EXISTS trips;

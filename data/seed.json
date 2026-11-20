@@ -1,0 +1,1 @@
+{"_exportedAt":"2026-11-19","_notes":"Clean base app — intentionally empty. Guy wants to start fresh and create his own profile, camps, stands, and groups in the deployed app, instead of carrying over the Muse app's data. The seed step runs but inserts nothing except default app settings. No claim-seed step is needed for this build."}

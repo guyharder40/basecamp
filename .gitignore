@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-server/
+data/basecamp.db
+data/basecamp.db-wal
+data/basecamp.db-shm
+.env
+*.local
+.DS_Store
