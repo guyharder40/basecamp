@@ -313,7 +313,9 @@ app.post('/api/camps', wrap(async (req, res, db) => {
   const ownerName = await myDisplayName(db, req);
   const r = await db.run(
     'INSERT INTO camps (name, location, acres, description, shareCode, ownerName, ownerUserId, centerLat, centerLng, mapZoom, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [name, req.body?.location ?? '', String(req.body?.acres ?? ''), req.body?.description ?? '', shareCode(), ownerName, user.id, Number(req.body?.centerLat ?? 39.0977), Number(req.body?.centerLng ?? -76.651), Number(req.body?.mapZoom ?? 14), nowIso()]
+    // A new camp starts centred on the middle of the US until its owner
+    // sets the real location — never on anybody's own camp.
+    [name, req.body?.location ?? '', String(req.body?.acres ?? ''), req.body?.description ?? '', shareCode(), ownerName, user.id, Number(req.body?.centerLat ?? 39.8283), Number(req.body?.centerLng ?? -98.5795), Number(req.body?.mapZoom ?? 14), nowIso()]
   );
   const row = await db.get('SELECT * FROM camps WHERE id = ?', [r.lastInsertRowid]);
   res.json(mapCamp(row, 1, 0));

@@ -147,7 +147,7 @@ export default function App() {
     if (containsBadLanguage(campName) || containsBadLanguage(campLocation)) { setError(BAD_LANGUAGE_WARNING); return; }
     setBusy(true); setError('');
     try {
-      const camp = await api.createCamp({ name: campName.trim(), location: campLocation.trim() || 'Not set', acres: campAcres.trim() || '', centerLat: 39.0977, centerLng: -76.6510, mapZoom: 14 });
+      const camp = await api.createCamp({ name: campName.trim(), location: campLocation.trim() || 'Not set', acres: campAcres.trim() || '', centerLat: 39.8283, centerLng: -98.5795, mapZoom: 14 });
       setCampName(''); setCampLocation(''); setCampAcres(''); setShowCreate(false);
       await loadAll();
       setOpenCampId(camp.id);
@@ -317,11 +317,11 @@ export default function App() {
                 {showCreate && (
                   <div>
                     <label>Camp name</label>
-                    <input value={campName} onChange={e => setCampName(e.target.value)} placeholder="e.g. GPCCN - Private" />
+                    <input value={campName} onChange={e => setCampName(e.target.value)} placeholder="e.g. Pine Ridge Camp" />
                     <label>Location</label>
-                    <input value={campLocation} onChange={e => setCampLocation(e.target.value)} placeholder="e.g. Severn, MD" />
+                    <input value={campLocation} onChange={e => setCampLocation(e.target.value)} placeholder="e.g. City, State" />
                     <label>Acres</label>
-                    <input value={campAcres} onChange={e => setCampAcres(e.target.value)} placeholder="e.g. 115" inputMode="decimal" />
+                    <input value={campAcres} onChange={e => setCampAcres(e.target.value)} placeholder="e.g. 50" inputMode="decimal" />
                     {containsBadLanguage(campName) && <p className="err">{BAD_LANGUAGE_WARNING}</p>}
                     {!campName.trim() && <p className="small">Enter a camp name to create it.</p>}
                     <div className="row" style={{ marginTop: 8 }}><button className="btn primary grow" disabled={!campName.trim() || busy || containsBadLanguage(campName)} onClick={createCamp}>Create camp</button></div>

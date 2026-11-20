@@ -50,7 +50,7 @@ export async function seedFromFile(db: Db): Promise<void> {
     const r = await db.run(
       `INSERT INTO camps (name, location, acres, description, shareCode, ownerName, ownerUserId, centerLat, centerLng, mapZoom, createdAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [c.name, c.location ?? '', String(c.acres ?? ''), c.description ?? '', c.shareCode, c.ownerName ?? '', SEED_OWNER_ID, c.centerLat ?? 39.0977, c.centerLng ?? -76.651, c.mapZoom ?? 14, c.created_at ?? now()]
+      [c.name, c.location ?? '', String(c.acres ?? ''), c.description ?? '', c.shareCode, c.ownerName ?? '', SEED_OWNER_ID, c.centerLat ?? 39.8283, c.centerLng ?? -98.5795, c.mapZoom ?? 14, c.created_at ?? now()]
     );
     const campId = r.lastInsertRowid ?? c.id;
     for (const pin of c.pins ?? []) {

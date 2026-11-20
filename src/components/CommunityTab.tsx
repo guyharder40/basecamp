@@ -216,9 +216,9 @@ export default function CommunityTab({ profile }: { profile: Profile }) {
             {showCreate && (
               <div className="card" style={{ marginTop: 10 }}>
                 <label>Group name</label>
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. MD Hunters" />
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. River Valley Hunters" />
                 <label>Home state (optional)</label>
-                <input value={newState} onChange={e => setNewState(e.target.value)} placeholder="e.g. MD" />
+                <input value={newState} onChange={e => setNewState(e.target.value)} placeholder="e.g. OH" />
                 <label>About (optional)</label>
                 <textarea value={newAbout} onChange={e => setNewAbout(e.target.value)} placeholder="What is this group about?" />
                 {badGroup && <p className="err">{BAD_LANGUAGE_WARNING}</p>}
