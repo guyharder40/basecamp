@@ -164,7 +164,7 @@ export default function CampDetail({ campId, profile, friends, settings, onBack,
         <div className="row-wrap" style={{ marginTop: 10 }}>
           <button className="btn primary" onClick={() => { navigator.clipboard?.writeText(camp.shareCode).catch(() => undefined); flash('Share code copied.'); }}>Copy invite</button>
           {isOwner && <span className="pill orange">You own this camp</span>}
-          {isOwner && <button className="btn danger" onClick={async () => { if (window.confirm(`Delete ${camp.name} and everything in it?`)) { await api.deleteCamp(camp.id); onCampsChanged(); onBack(); } }}>Delete camp</button>}
+          {isOwner && <button className="btn danger" onClick={async () => { if (window.confirm(`Delete ${camp.name} and everything in it?`)) { try { await api.deleteCamp(camp.id); onCampsChanged(); onBack(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete this camp.'); } } }}>Delete camp</button>}
         </div>
         <p className="small" style={{ marginBottom: 0 }}>Anyone with the code can join and help build this camp.</p>
       </div>

@@ -6,7 +6,7 @@ import { getDb, type Db } from './db.js';
 import { profanityError, FIELD_LIMITS } from './profanity.js';
 import { fetchWind, scoreGoHunt, compassWord, type WindSnapshot } from './weather.js';
 import { computeBadges, buildLeaderboard, seasonOf, seasonLabelFor, type Activity, type TrophyPostInput } from './scoring.js';
-import { authMiddleware, requireAuth, requestUserId, isOwner, sameAccount, visibleContact, authConfigured, authConfig, SEED_OWNER_ID, type AuthedRequest } from './auth.js';
+import { authMiddleware, requireAuth, requestUserId, isOwner, sameAccount, visibleContact, authConfigured, authConfig, SEED_OWNER_ID, LOCAL_USER_ID, type AuthedRequest } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Package root: works both under tsx (server/) and compiled
@@ -54,9 +54,49 @@ function sessionsOverlap(a: string, b: string): boolean { return a === 'all_day'
 function limitText(v: string, max: number): string { return String(v ?? '').slice(0, max); }
 
 type Handler = (req: AuthedRequest, res: Response, db: Db) => Promise<unknown>;
+
+// One-time self-claim of the seeded rows. Seeded records carry the
+// placeholder owner 'seed-owner' until the first real account claims them
+// (scripts/claim-seed.ts did this by hand). If that step never ran — e.g.
+// the database kept the seeded rows while the app was redeployed from a
+// clean build — the owner is locked out of their own camp: the app shows
+// the owner controls (the names match) but the server refuses delete and
+// invite with 403. So the first authenticated account to show up claims
+// the seed data, exactly as the manual script would have. Checked once
+// per account per process; a failure never breaks the request itself.
+const seedClaimChecked = new Set<string>();
+async function maybeClaimSeed(db: Db, req: AuthedRequest): Promise<void> {
+  const user = req.authUser;
+  if (!user || user.id === LOCAL_USER_ID || seedClaimChecked.has(user.id)) return;
+  seedClaimChecked.add(user.id);
+  try {
+    const profile = await db.get<any>('SELECT ownerUserId FROM profile WHERE id = 1');
+    if (!profile || ((profile.ownerUserId ?? SEED_OWNER_ID) !== SEED_OWNER_ID)) return;
+    const tables: [string, string][] = [
+      ['profile', 'ownerUserId'],
+      ['camps', 'ownerUserId'],
+      ['camp_members', 'userId'],
+      ['checkins', 'userId'],
+      ['reservations', 'userId'],
+      ['messages', 'authorUserId'],
+      ['photos', 'authorUserId'],
+      ['community_groups', 'createdByUserId'],
+      ['community_group_members', 'userId'],
+      ['community_posts', 'authorUserId'],
+    ];
+    for (const [table, col] of tables) {
+      await db.run(`UPDATE ${table} SET ${col} = ? WHERE ${col} = ?`, [user.id, SEED_OWNER_ID]);
+    }
+    console.log(`Seed data claimed for account ${user.id}`);
+  } catch (e) {
+    seedClaimChecked.delete(user.id);
+    console.warn('Seed claim failed (will retry on a later request):', e instanceof Error ? e.message : e);
+  }
+}
+
 function wrap(fn: Handler) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    try { const db = await getDb(); await fn(req as AuthedRequest, res, db); }
+    try { const db = await getDb(); await maybeClaimSeed(db, req as AuthedRequest); await fn(req as AuthedRequest, res, db); }
     catch (e) { next(e); }
   };
 }
