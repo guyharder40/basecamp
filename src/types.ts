@@ -42,7 +42,7 @@ export const BADGE_GLYPHS: Record<string, string> = {
   first_hunt: '<ellipse cx="12" cy="15.5" rx="4.2" ry="3.4"/><circle cx="5.6" cy="10.6" r="1.7"/><circle cx="9.3" cy="7.7" r="1.7"/><circle cx="13.9" cy="7.7" r="1.7"/><circle cx="17.7" cy="10.6" r="1.7"/>',
   first_harvest: '<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.3" fill="INK" stroke="none"/>',
   first_buck: '<path d="M10 21c0-5-1-8-3.5-10.5M6.5 10.5C5 9 4.5 6.5 5 4M6.5 10.5c1.5-1 2.1-3 1.9-5M14 21c0-5 1-8 3.5-10.5M17.5 10.5c1.5-1.5 2-4 1.5-6.5M17.5 10.5c-1.5-1-2.1-3-1.9-5"/>',
-  first_doe: '<path d="M8.5 3.5h7V10c0 2-.9 3-1.5 4.4l-.9 4.1a1.9 1.9 0 0 1-3.7 0L8.5 14.4C7.9 13 8.5 12 8.5 10Z"/><circle cx="10.4" cy="10.8" r="1.05" fill="INK" stroke="none"/><circle cx="13.6" cy="10.8" r="1.05" fill="INK" stroke="none"/>',
+  first_doe: '<path d="M7 3.5h10V10c0 1.8-.8 2.8-1.3 4.2l-.8 4.3a1.9 1.9 0 0 1-3.8 0l-.8-4.3C7.8 12.8 7 11.8 7 10Z"/><circle cx="10.2" cy="10.8" r="1.05" fill="INK" stroke="none"/><circle cx="13.8" cy="10.8" r="1.05" fill="INK" stroke="none"/><path d="M7 5.2 4.6 4M17 5.2 19.4 4"/>',
   first_turkey: '<path d="M19.5 4.5C14 4.8 8.6 8.6 6.9 14.7L5 21"/><path d="M7.2 14.3c3.8-.3 7.3-2.4 9.6-5.6"/><path d="M9.4 12.6l3.8-.4M11.3 9.9l3.6-.5M13.4 7.5l3.3-.6"/>',
   seasoned_hunter: '<path d="M12 3.5l2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.2l-5.1 2.7L8 13.3 3.8 9.4l5.7-.7Z"/>',
   full_freezer: '<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><circle cx="12" cy="12" r="1.6"/>',
@@ -64,7 +64,7 @@ export const BADGE_GLYPHS: Record<string, string> = {
   crowd_favorite: '<path d="M12 20.5S4 15.3 4 9.6A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 8 2.6c0 5.7-8 10.9-8 10.9Z"/>',
   inner_circle: '<circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="4.6" r="1.6"/><circle cx="18.4" cy="9.4" r="1.6"/><circle cx="16.1" cy="18" r="1.6"/><circle cx="7.9" cy="18" r="1.6"/><circle cx="5.6" cy="9.4" r="1.6"/>',
 };
-function starburstPoints(spikes = 24, outer = 49, inner = 44.5): string {
+function starburstPoints(spikes = 36, outer = 49, inner = 45.8): string {
   const pts: string[] = [];
   for (let i = 0; i < spikes * 2; i++) {
     const r = i % 2 === 0 ? outer : inner;
@@ -90,7 +90,7 @@ export function badgeMedalSvg(id: string, earned: boolean, mini = false): string
   const beads = gold ? 'rgba(255,246,205,.95)' : 'rgba(255,232,196,.9)';
   const gid = `bgm-${id}-${gold ? 'g' : 'b'}`;
   const g = glyph.replaceAll('INK', '#fff7e0');
-  const ribbons = mini ? '' : '<path d="M34 70h15l-3.5 38-5.8-6.2L34 108Z" fill="#a33327"/><path d="M51 70h15l3.5 38-5.8-6.2L57 108Z" fill="#8e2b20"/>';
+  const ribbons = mini ? '' : '<path d="M36 72h12l-3 34-4.8-5.4L35 106Z" fill="#a33327"/><path d="M52 72h12l3 34-4.8-5.4L57 106Z" fill="#8e2b20"/>';
   return `<svg viewBox="0 0 100 ${mini ? 100 : 116}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="${gid}" cx="38%" cy="30%" r="85%"><stop offset="0%" stop-color="${face[0]}"/><stop offset="55%" stop-color="${face[1]}"/><stop offset="100%" stop-color="${face[2]}"/></radialGradient></defs>${ribbons}<polygon points="${starburstPoints()}" fill="${seal}"/><circle cx="50" cy="50" r="39" fill="url(#${gid})" stroke="${ring}" stroke-width="1.6"/><circle cx="50" cy="50" r="34.5" fill="none" stroke="${beads}" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="0.1 5.03"/><circle cx="50" cy="50" r="30.5" fill="none" stroke="rgba(90,55,10,.45)" stroke-width="1"/><ellipse cx="36" cy="31" rx="19" ry="11" fill="#ffffff" opacity="0.16"/><g transform="translate(33.5,33.5) scale(1.375)" fill="none" stroke="#fff7e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${g}</g></svg>`;
 }
 export function badgeEmoji(id: string): string {

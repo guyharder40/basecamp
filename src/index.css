@@ -241,3 +241,7 @@ input.color-box { width:56px; height:38px; flex:none; padding:2px; border-radius
 .pill.orange { background:linear-gradient(180deg,#e08a3c,#c96f27); color:#fff7ea; border-color:transparent; font-weight:700; }
 .badge-cell.earned { border-color:var(--border); }
 .badge-pin2 { position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; z-index:2; }
+
+/* The pre-SVG badge design drew ribbon tails with cell pseudo-elements;
+   they must not paint over the new medallions. */
+.badge-cell.earned::before, .badge-cell.earned::after { content:none; }

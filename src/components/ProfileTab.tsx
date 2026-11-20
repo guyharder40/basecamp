@@ -341,7 +341,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
           <div className="badge-grid">
             {badges.map(b => (
               <button key={b.id} className={`badge-cell ${b.earned ? 'earned' : 'locked'}`} onClick={() => setBadgePop(b)}>
-                <BadgeMedal id={b.id} earned={b.earned} size={92} />
+                <BadgeMedal id={b.id} earned={b.earned} size={76} />
                 <span className="badge-name">{b.name}</span>
                 <span className="badge-prog">{b.earned ? (fmtEarnedDate(b.earnedAt) ?? 'Earned') : 'Locked'}</span>
                 {pinned.includes(b.id) && <span className="badge-pin2" title="Pinned beside your name"><TeardropPin type="other" color="#ffffff" size={10} /></span>}
@@ -354,7 +354,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
       {badgePop && (
         <div className="sheet" onClick={() => setBadgePop(null)}>
           <div className="sheet-inner" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 6px' }}><BadgeMedal id={badgePop.id} earned={badgePop.earned} size={120} /></div>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 6px' }}><BadgeMedal id={badgePop.id} earned={badgePop.earned} size={108} /></div>
             <h2 style={{ margin: '8px 0 4px' }}>{badgePop.name}</h2>
             <p>{badgePop.description}</p>
             <p className="muted">{badgePop.earned ? `Earned${fmtEarnedDate(badgePop.earnedAt) ? ` ${fmtEarnedDate(badgePop.earnedAt)}` : ''}` : `Not earned yet · Progress: ${badgePop.current} of ${badgePop.target}`}</p>
