@@ -2,7 +2,7 @@
 -- Rebuilt 2026-11-17 from the live Basecamp app. The old dead tables
 -- `spots` and `trips` are gone (the live app has no Spots or Trips tab).
 CREATE TABLE IF NOT EXISTS profile (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
+  id SERIAL PRIMARY KEY,
   ownerUserId TEXT NOT NULL DEFAULT 'seed-owner',
   firstName TEXT NOT NULL DEFAULT '',
   lastName TEXT NOT NULL DEFAULT '',
@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS profile (
 );
 CREATE TABLE IF NOT EXISTS friends (
   id SERIAL PRIMARY KEY,
+  ownerUserId TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   email TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS camp_members (
 );
 CREATE TABLE IF NOT EXISTS pins (
   id SERIAL PRIMARY KEY,
+  createdByUserId TEXT NOT NULL DEFAULT '',
   campId INTEGER NOT NULL,
   label TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL DEFAULT '',
@@ -79,6 +81,7 @@ CREATE TABLE IF NOT EXISTS pins (
 );
 CREATE TABLE IF NOT EXISTS trails (
   id SERIAL PRIMARY KEY,
+  createdByUserId TEXT NOT NULL DEFAULT '',
   campId INTEGER NOT NULL,
   name TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#C2702E',
@@ -155,6 +158,7 @@ CREATE TABLE IF NOT EXISTS photo_comments (
 );
 CREATE TABLE IF NOT EXISTS gear (
   id SERIAL PRIMARY KEY,
+  ownerUserId TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'Other',
   brand TEXT NOT NULL DEFAULT '',
@@ -164,6 +168,7 @@ CREATE TABLE IF NOT EXISTS gear (
 );
 CREATE TABLE IF NOT EXISTS hunts (
   id SERIAL PRIMARY KEY,
+  ownerUserId TEXT NOT NULL DEFAULT '',
   date TEXT NOT NULL,
   species TEXT NOT NULL DEFAULT '',
   stand TEXT NOT NULL DEFAULT '',
@@ -174,6 +179,7 @@ CREATE TABLE IF NOT EXISTS hunts (
 );
 CREATE TABLE IF NOT EXISTS licenses (
   id SERIAL PRIMARY KEY,
+  ownerUserId TEXT NOT NULL DEFAULT '',
   state TEXT NOT NULL DEFAULT '',
   kind TEXT NOT NULL DEFAULT '',
   licenseNumber TEXT NOT NULL DEFAULT '',
@@ -238,7 +244,8 @@ CREATE TABLE IF NOT EXISTS community_post_comments (
   createdAt TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS app_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
+  id SERIAL PRIMARY KEY,
+  ownerUserId TEXT NOT NULL DEFAULT '',
   theme TEXT NOT NULL DEFAULT 'system',
   units TEXT NOT NULL DEFAULT 'imperial',
   defaultMapView TEXT NOT NULL DEFAULT 'streets',

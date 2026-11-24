@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isGoogleEnabled, signInEmail, signInGoogle, signInMagicLink, signUpEmail } from '../lib/supabase';
+import { isGoogleEnabled, resetPassword, signInEmail, signInGoogle, signInMagicLink, signUpEmail } from '../lib/supabase';
 
 export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'magic'>('signin');
@@ -15,10 +15,30 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true); setErr(''); setMsg('');
     try {
       if (mode === 'signin') await signInEmail(email.trim(), password);
-      else if (mode === 'signup') await signUpEmail(email.trim(), password);
+      else if (mode === 'signup') {
+        const data = await signUpEmail(email.trim(), password);
+        // When email confirmation is on, sign-up returns no session: the
+        // account exists but can't sign in until the email link is clicked.
+        if (!data.session) {
+          setMode('signin');
+          setPassword('');
+          setMsg('Account created. Check your email to confirm your account, then sign in here.');
+          return;
+        }
+      }
       else { await signInMagicLink(email.trim()); setMsg('Check your email for a sign-in link.'); return; }
       onSignedIn();
     } catch (e) { setErr(e instanceof Error ? e.message : 'Sign-in failed.'); }
+    finally { setBusy(false); }
+  }
+
+  async function forgot() {
+    if (!email.trim()) { setErr('Enter your email address first, then tap Forgot password.'); return; }
+    setBusy(true); setErr(''); setMsg('');
+    try {
+      await resetPassword(email.trim());
+      setMsg('Check your email for a link to set a new password.');
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not send the reset email.'); }
     finally { setBusy(false); }
   }
 
@@ -49,6 +69,11 @@ export default function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
             {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send sign-in link'}
           </button>
         </div>
+        {mode === 'signin' && (
+          <div className="row" style={{ marginTop: 6 }}>
+            <button className="btn grow" disabled={busy} onClick={forgot}>Forgot password?</button>
+          </div>
+        )}
         {isGoogleEnabled() && (
           <div className="row" style={{ marginTop: 8 }}>
             <button className="btn grow" disabled={busy} onClick={async () => { setBusy(true); try { await signInGoogle(); } catch (e) { setErr(e instanceof Error ? e.message : 'Google sign-in failed.'); } finally { setBusy(false); } }}>

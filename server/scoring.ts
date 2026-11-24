@@ -46,7 +46,7 @@ export const BADGE_DEFS: BadgeDef[] = [
   { id: 'trophy_wall', name: 'Trophy Wall', description: 'Post 5 trophy photos.', check: a => a.trophyPosts >= 5, progress: a => prog(a.trophyPosts, 5) },
   { id: 'campfire_voice', name: 'Campfire Voice', description: 'Send 10 camp chat messages.', check: a => a.chatMessages >= 10, progress: a => prog(a.chatMessages, 10) },
   { id: 'good_company', name: 'Good Company', description: 'Have 3 friends.', check: a => a.friends >= 3, progress: a => prog(a.friends, 3) },
-  { id: 'founder', name: 'Founder', description: 'Joined in Basecamp’s first year.', check: a => a.accountCreatedAt <= founderCutoff(), progress: a => prog(a.accountCreatedAt <= founderCutoff() ? 1 : 0, 1) },
+  { id: 'founder', name: 'Founder', description: 'Joined in Basecamp’s first year.', check: a => !!a.accountCreatedAt && a.accountCreatedAt <= founderCutoff(), progress: a => prog(a.accountCreatedAt && a.accountCreatedAt <= founderCutoff() ? 1 : 0, 1) },
   { id: 'veteran_hunter', name: 'Veteran Hunter', description: 'Log 25 hunts.', check: a => a.hunts >= 25, progress: a => prog(a.hunts, 25) },
   { id: 'deadeye', name: 'Deadeye', description: 'Record 10 harvests.', check: a => a.harvests >= 10, progress: a => prog(a.harvests, 10) },
   { id: 'grand_slam', name: 'Grand Slam', description: 'Harvest 3 different species.', check: a => a.species.length >= 3, progress: a => prog(a.species.length, 3) },

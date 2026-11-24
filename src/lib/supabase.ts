@@ -170,13 +170,18 @@ export async function signInEmail(email: string, password: string) {
 }
 export async function signUpEmail(email: string, password: string) {
   const c = await requireClient();
-  const { data, error } = await c.auth.signUp({ email, password });
+  const { data, error } = await c.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
   if (error) throw error;
   return data;
 }
 export async function signInMagicLink(email: string) {
   const c = await requireClient();
-  const { error } = await c.auth.signInWithOtp({ email });
+  const { error } = await c.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+  if (error) throw error;
+}
+export async function resetPassword(email: string) {
+  const c = await requireClient();
+  const { error } = await c.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
   if (error) throw error;
 }
 export async function signInGoogle() {

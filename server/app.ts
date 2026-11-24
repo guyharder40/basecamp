@@ -96,9 +96,37 @@ async function maybeClaimSeed(db: Db, req: AuthedRequest): Promise<void> {
 
 function wrap(fn: Handler) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    try { const db = await getDb(); await maybeClaimSeed(db, req as AuthedRequest); await fn(req as AuthedRequest, res, db); }
+    try { const db = await getDb(); await maybeClaimSeed(db, req as AuthedRequest); await maybeClaimLegacy(db, req as AuthedRequest); await fn(req as AuthedRequest, res, db); }
     catch (e) { next(e); }
   };
+}
+
+// One-time adoption of the rows that predate per-account ownership. When
+// the app effectively had one user, private rows (friends, gear, hunts,
+// licenses, settings) and map work (pins, trails) were stored with no
+// owner. They belong to the owner of the first profile — the primary
+// account — so that account adopts them; later accounts start clean.
+// Runs once per account per process, and only for the primary owner.
+const legacyClaimChecked = new Set<string>();
+async function maybeClaimLegacy(db: Db, req: AuthedRequest): Promise<void> {
+  const user = req.authUser;
+  if (!user || user.id === LOCAL_USER_ID || legacyClaimChecked.has(user.id)) return;
+  legacyClaimChecked.add(user.id);
+  try {
+    const first = await db.get<any>('SELECT ownerUserId FROM profile ORDER BY id ASC LIMIT 1');
+    if (!first || !isOwner(first.ownerUserId, user.id)) return;
+    const tables: [string, string][] = [
+      ['friends', 'ownerUserId'], ['gear', 'ownerUserId'], ['hunts', 'ownerUserId'],
+      ['licenses', 'ownerUserId'], ['app_settings', 'ownerUserId'],
+      ['pins', 'createdByUserId'], ['trails', 'createdByUserId'],
+    ];
+    for (const [table, col] of tables) {
+      await db.run(`UPDATE ${table} SET ${col} = ? WHERE ${col} = '' OR ${col} = ?`, [user.id, SEED_OWNER_ID]);
+    }
+  } catch (e) {
+    legacyClaimChecked.delete(user.id);
+    console.warn('Legacy ownership claim failed (will retry on a later request):', e instanceof Error ? e.message : e);
+  }
 }
 function bad(res: Response, status: number, message: string): void { res.status(status).json({ error: message }); }
 function profanityFail(res: Response, ...texts: (string | undefined | null)[]): boolean {
@@ -164,8 +192,26 @@ async function isCampOwner(db: Db, campId: number, userId: string): Promise<bool
   if (!camp) return false;
   return isOwner(camp.ownerUserId, userId);
 }
+/** The profile row belonging to the signed-in account. Profiles are
+ *  per-account since the multi-user build-out; local mode (no auth
+ *  configured) keeps the single row it has always had. */
+async function profileRowForUser(db: Db, req: AuthedRequest): Promise<any | null> {
+  const uid = requestUserId(req);
+  if (authConfigured() && uid) {
+    const rows = await db.all<any>('SELECT * FROM profile ORDER BY id ASC');
+    return rows.find(r => sameAccount(r.ownerUserId, uid)) ?? null;
+  }
+  const row = await db.get('SELECT * FROM profile ORDER BY id ASC LIMIT 1');
+  return row ?? null;
+}
+/** Does this account own a private row (friends / gear / hunts /
+ *  licenses / settings)? Local mode: everything belongs to the local user. */
+function ownsPrivate(ownerVal: unknown, uid: string): boolean {
+  if (!authConfigured()) return true;
+  return sameAccount(String(ownerVal ?? ''), uid);
+}
 async function myDisplayName(db: Db, req: AuthedRequest): Promise<string> {
-  const row = await db.get<any>('SELECT firstName, lastName FROM profile WHERE id = 1');
+  const row = await profileRowForUser(db, req);
   const name = `${row?.firstName ?? ''} ${row?.lastName ?? ''}`.trim();
   return name || req.authUser?.email || 'Hunter';
 }
@@ -178,37 +224,29 @@ app.get('/api/health', wrap(async (_req, res, db) => { res.json({ ok: true, db: 
 // design; the service-role key is never served). No DB access needed.
 app.get('/api/auth/config', (_req, res) => { res.json(authConfig()); });
 app.get('/api/auth/status', wrap(async (req, res, db) => {
-  const profile = await db.get('SELECT * FROM profile WHERE id = 1');
+  const profile = await profileRowForUser(db, req);
   res.json({
     configured: authConfigured(),
     signedIn: !!req.authUser,
     userId: req.authUser?.id ?? null,
     email: req.authUser?.email ?? null,
-    profileLinked: profile ? isOwner((profile as any).ownerUserId, req.authUser?.id ?? '') : false,
+    profileLinked: !!profile,
     profileName: profile ? `${(profile as any).firstName ?? ''} ${(profile as any).lastName ?? ''}`.trim() : '',
   });
 }));
 
-// Profile
+// Profile — always the signed-in account's own profile.
 app.get('/api/profile', wrap(async (req, res, db) => {
-  const row = await db.get('SELECT * FROM profile WHERE id = 1');
+  const row = await profileRowForUser(db, req);
   if (!row) return res.json({ firstName: '', lastName: '', displayName: '', status: '', bio: '', email: '', emailVisibility: 'private', phone: '', phoneVisibility: 'private', interests: [], huntingState: '', avatarUrl: '', bannerUrl: '', pinnedBadges: [], discoverable: true, profileVisibility: 'friends', createdAt: '' });
-  const p = mapProfile(row);
-  // Contact details are gated by visibility for other accounts; the owner
-  // always sees their own. (Single profile row = the signed-in hunter.)
-  const viewerId = requestUserId(req);
-  const ownerId = (row as any).ownerUserId ?? SEED_OWNER_ID;
-  if (viewerId && viewerId !== ownerId && !isOwner(ownerId, viewerId)) {
-    p.email = visibleContact(p.email, p.emailVisibility, viewerId, ownerId, false);
-    p.phone = visibleContact(p.phone, p.phoneVisibility, viewerId, ownerId, false);
-  }
-  res.json(p);
+  res.json(mapProfile(row));
 }));
 app.put('/api/profile', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   const b = req.body ?? {};
   if (profanityFail(res, b.firstName, b.lastName, b.status, b.bio)) return;
-  const cur = await db.get('SELECT * FROM profile WHERE id = 1');
+  const existing = await profileRowForUser(db, req);
+  const cur = existing ?? undefined;
   const merged = {
     firstName: limitText(b.firstName ?? cur?.firstName ?? '', FIELD_LIMITS.textShort),
     lastName: limitText(b.lastName ?? cur?.lastName ?? '', FIELD_LIMITS.textShort),
@@ -222,39 +260,40 @@ app.put('/api/profile', wrap(async (req, res, db) => {
     discoverable: b.discoverable !== undefined ? (b.discoverable ? 1 : 0) : (toBool(cur?.discoverable ?? 1) ? 1 : 0),
     profileVisibility: b.profileVisibility ?? cur?.profileVisibility ?? 'friends',
   };
-  const ownerUserId = (cur as any)?.ownerUserId ?? SEED_OWNER_ID;
-  const createdAt = (cur as any)?.createdAt || nowIso();
-  await db.run(
-    `INSERT INTO profile (id, ownerUserId, firstName, lastName, status, bio, email, emailVisibility, phone, phoneVisibility, interests, huntingState, avatarUrl, bannerUrl, pinnedBadges, discoverable, profileVisibility, createdAt)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET firstName=excluded.firstName, lastName=excluded.lastName, status=excluded.status, bio=excluded.bio, email=excluded.email, emailVisibility=excluded.emailVisibility, phone=excluded.phone, phoneVisibility=excluded.phoneVisibility, interests=excluded.interests, huntingState=excluded.huntingState, avatarUrl=excluded.avatarUrl, bannerUrl=excluded.bannerUrl, pinnedBadges=excluded.pinnedBadges, discoverable=excluded.discoverable, profileVisibility=excluded.profileVisibility`,
-    [ownerUserId, merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, createdAt]
-  ).catch(async () => {
-    const exists = await db.get('SELECT id FROM profile WHERE id = 1');
-    if (exists) await db.run('UPDATE profile SET firstName=?, lastName=?, status=?, bio=?, email=?, emailVisibility=?, phone=?, phoneVisibility=?, interests=?, huntingState=?, avatarUrl=?, bannerUrl=?, pinnedBadges=?, discoverable=?, profileVisibility=? WHERE id=1', [merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility]);
-    else await db.run('INSERT INTO profile (id, ownerUserId, firstName, lastName, status, bio, email, emailVisibility, phone, phoneVisibility, interests, huntingState, avatarUrl, bannerUrl, pinnedBadges, discoverable, profileVisibility, createdAt) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [ownerUserId, merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, createdAt]);
-  });
-  const row = await db.get('SELECT * FROM profile WHERE id = 1');
+  if (existing) {
+    await db.run('UPDATE profile SET firstName=?, lastName=?, status=?, bio=?, email=?, emailVisibility=?, phone=?, phoneVisibility=?, interests=?, huntingState=?, avatarUrl=?, bannerUrl=?, pinnedBadges=?, discoverable=?, profileVisibility=? WHERE id=?',
+      [merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, (existing as any).id]);
+  } else {
+    // First save for this account: create its own profile row.
+    await db.run('INSERT INTO profile (ownerUserId, firstName, lastName, status, bio, email, emailVisibility, phone, phoneVisibility, interests, huntingState, avatarUrl, bannerUrl, pinnedBadges, discoverable, profileVisibility, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user.id, merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, nowIso()]);
+  }
+  const row = await profileRowForUser(db, req);
   res.json(mapProfile(row));
 }));
 
-// Friends (+ real friend requests)
-app.get('/api/friends', wrap(async (_req, res, db) => {
+// Friends (+ real friend requests) — the friends list is per-account.
+app.get('/api/friends', wrap(async (req, res, db) => {
+  const uid = requestUserId(req);
   const rows = await db.all('SELECT * FROM friends ORDER BY name ASC');
-  res.json(rows.map(mapFriend));
+  res.json(rows.filter((r: any) => ownsPrivate(r.ownerUserId, uid)).map(mapFriend));
 }));
 app.post('/api/friends', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   const name = limitText(String(req.body?.name ?? '').trim(), FIELD_LIMITS.textShort);
   if (!name) return bad(res, 400, 'Name is required.');
   if (profanityFail(res, name, req.body?.notes)) return;
-  const existing = await db.get('SELECT * FROM friends WHERE LOWER(name) = LOWER(?)', [name]);
+  const mine = (await db.all('SELECT * FROM friends')).filter((r: any) => ownsPrivate(r.ownerUserId, user.id));
+  const existing = mine.find((r: any) => String(r.name).toLowerCase() === name.toLowerCase());
   if (existing) return res.json(mapFriend(existing));
-  const r = await db.run('INSERT INTO friends (name, email, phone, notes, createdAt) VALUES (?, ?, ?, ?, ?)', [name, req.body?.email ?? '', req.body?.phone ?? '', req.body?.notes ?? '', nowIso()]);
+  const r = await db.run('INSERT INTO friends (name, email, phone, notes, createdAt, ownerUserId) VALUES (?, ?, ?, ?, ?, ?)', [name, req.body?.email ?? '', req.body?.phone ?? '', req.body?.notes ?? '', nowIso(), user.id]);
   const row = await db.get('SELECT * FROM friends WHERE id = ?', [r.lastInsertRowid]);
   res.json(mapFriend(row));
 }));
 app.delete('/api/friends/:id', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
+  const row = await db.get<any>('SELECT * FROM friends WHERE id = ?', [req.params.id]);
+  if (!row || !ownsPrivate(row.ownerUserId, user.id)) return bad(res, 404, 'Friend not found.');
   await db.run('DELETE FROM friends WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 }));
@@ -281,8 +320,9 @@ app.post('/api/friends/requests/:id/accept', wrap(async (req, res, db) => {
   if (!r) return bad(res, 404, 'Friend request not found.');
   if (authConfigured() && r.toUserId && r.toUserId !== user.id) return bad(res, 403, 'Only the person invited can accept this request.');
   await db.run('UPDATE friend_requests SET status = ? WHERE id = ?', ['accepted', req.params.id]);
-  const existing = await db.get('SELECT * FROM friends WHERE LOWER(name) = LOWER(?)', [r.fromName]);
-  if (!existing) await db.run('INSERT INTO friends (name, email, phone, notes, createdAt) VALUES (?, ?, ?, ?, ?)', [r.fromName, '', '', '', nowIso()]);
+  const mine = (await db.all('SELECT * FROM friends')).filter((f: any) => ownsPrivate(f.ownerUserId, user.id));
+  const existing = mine.find((f: any) => String(f.name).toLowerCase() === String(r.fromName).toLowerCase());
+  if (!existing) await db.run('INSERT INTO friends (name, email, phone, notes, createdAt, ownerUserId) VALUES (?, ?, ?, ?, ?, ?)', [r.fromName, '', '', '', nowIso(), user.id]);
   res.json({ ok: true });
 }));
 app.post('/api/friends/requests/:id/decline', wrap(async (req, res, db) => {
@@ -294,9 +334,15 @@ app.post('/api/friends/requests/:id/decline', wrap(async (req, res, db) => {
   res.json({ ok: true });
 }));
 
-// Camps
-app.get('/api/camps', wrap(async (_req, res, db) => {
-  const rows = await db.all('SELECT * FROM camps ORDER BY createdAt DESC');
+// Camps — with sign-in on, a hunter sees the camps they own or belong to.
+app.get('/api/camps', wrap(async (req, res, db) => {
+  let rows = await db.all<any>('SELECT * FROM camps ORDER BY createdAt DESC');
+  if (authConfigured()) {
+    const uid = requestUserId(req);
+    const members = await db.all<any>('SELECT campId, userId FROM camp_members');
+    const memberCampIds = new Set(members.filter(m => sameAccount(m.userId, uid)).map(m => m.campId));
+    rows = rows.filter(r => isOwner(r.ownerUserId, uid) || memberCampIds.has(r.id));
+  }
   const out = [];
   for (const r of rows) {
     const mc = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM camp_members WHERE campId = ?', [r.id]);
@@ -328,11 +374,29 @@ app.post('/api/camps/join', wrap(async (req, res, db) => {
   const name = await myDisplayName(db, req);
   const existing = await db.get('SELECT * FROM camp_members WHERE campId = ? AND (userId = ? OR LOWER(name) = LOWER(?))', [row.id, user.id, name]);
   if (!existing) {
-    const profile = await db.get('SELECT * FROM profile WHERE id = 1');
+    const profile = await profileRowForUser(db, req);
     await db.run('INSERT INTO camp_members (campId, name, role, joined, email, phone, userId) VALUES (?, ?, ?, ?, ?, ?, ?)', [row.id, name, 'viewer', 1, (profile as any)?.email ?? '', (profile as any)?.phone ?? '', user.id]);
   }
   res.json(mapCamp(row, 1, 0));
 }));
+// Camp access gate: everything under /api/camps/:id (detail, map, pins,
+// trails, stands, chat, trophies, crew) is for the camp's owner and
+// members only. Registered after the list/create/join routes above, which
+// it must not block; local mode (no sign-in) is a single hunter, so open.
+app.use('/api/camps/:id', async (req, res, next) => {
+  try {
+    if (!authConfigured()) return next();
+    const uid = requestUserId(req as AuthedRequest);
+    if (!uid) return res.status(401).json({ error: 'Sign in to continue.' });
+    const db = await getDb();
+    const camp = await db.get<any>('SELECT ownerUserId FROM camps WHERE id = ?', [(req.params as any).id]);
+    if (!camp) return next(); // the handler itself answers 404
+    if (isOwner(camp.ownerUserId, uid)) return next();
+    const members = await db.all<any>('SELECT userId FROM camp_members WHERE campId = ?', [(req.params as any).id]);
+    if (members.some(m => sameAccount(m.userId, uid))) return next();
+    return res.status(403).json({ error: 'You are not a member of this camp.' });
+  } catch (e) { return next(e as Error); }
+});
 app.get('/api/camps/:id', wrap(async (req, res, db) => {
   const camp = await db.get('SELECT * FROM camps WHERE id = ?', [req.params.id]);
   if (!camp) return bad(res, 404, 'Camp not found.');
@@ -409,8 +473,8 @@ app.post('/api/camps/:id/pins', wrap(async (req, res, db) => {
   const label = `#${Number(count?.c ?? 0) + 1}`;
   const myName = await myDisplayName(db, req);
   const r = await db.run(
-    'INSERT INTO pins (campId, label, name, pinType, color, lat, lng, notes, bestWinds, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [req.params.id, label, limitText(String(b.name ?? '').trim() || label, FIELD_LIMITS.textShort), b.pinType ?? 'stand', b.color ?? '#C2702E', Number(b.lat), Number(b.lng), limitText(b.notes ?? '', FIELD_LIMITS.textBody), JSON.stringify(b.bestWinds ?? []), myName, nowIso()]
+    'INSERT INTO pins (campId, label, name, pinType, color, lat, lng, notes, bestWinds, createdBy, createdAt, createdByUserId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [req.params.id, label, limitText(String(b.name ?? '').trim() || label, FIELD_LIMITS.textShort), b.pinType ?? 'stand', b.color ?? '#C2702E', Number(b.lat), Number(b.lng), limitText(b.notes ?? '', FIELD_LIMITS.textBody), JSON.stringify(b.bestWinds ?? []), myName, nowIso(), user.id]
   );
   const row = await db.get('SELECT * FROM pins WHERE id = ?', [r.lastInsertRowid]);
   res.json(mapPin(row));
@@ -436,8 +500,8 @@ app.post('/api/camps/:id/trails', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   if (profanityFail(res, req.body?.name)) return;
   const points = Array.isArray(req.body?.points) ? req.body.points : [];
-  const r = await db.run('INSERT INTO trails (campId, name, color, points, distanceFt, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-    [req.params.id, limitText(req.body?.name ?? 'Trail', FIELD_LIMITS.textShort), req.body?.color ?? '#C2702E', JSON.stringify(points), trailDistanceFt(points), nowIso()]);
+  const r = await db.run('INSERT INTO trails (campId, name, color, points, distanceFt, createdAt, createdByUserId) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [req.params.id, limitText(req.body?.name ?? 'Trail', FIELD_LIMITS.textShort), req.body?.color ?? '#C2702E', JSON.stringify(points), trailDistanceFt(points), nowIso(), user.id]);
   const row = await db.get('SELECT * FROM trails WHERE id = ?', [r.lastInsertRowid]);
   res.json(mapTrail(row));
 }));
@@ -627,57 +691,67 @@ app.delete('/api/camps/:id/photos/:photoId', wrap(async (req, res, db) => {
 }));
 
 // Gear
-app.get('/api/gear', wrap(async (_req, res, db) => {
+app.get('/api/gear', wrap(async (req, res, db) => {
+  const uid = requestUserId(req);
   const rows = await db.all('SELECT * FROM gear ORDER BY name ASC');
-  res.json(rows.map(mapGear));
+  res.json(rows.filter((r: any) => ownsPrivate(r.ownerUserId, uid)).map(mapGear));
 }));
 app.post('/api/gear', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   const name = limitText(String(req.body?.name ?? '').trim(), FIELD_LIMITS.gearName);
   if (!name) return bad(res, 400, 'Gear name is required.');
   if (profanityFail(res, name, req.body?.brand, req.body?.notes)) return;
-  const r = await db.run('INSERT INTO gear (name, category, brand, notes, packed, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-    [name, req.body?.category ?? 'Other', limitText(req.body?.brand ?? '', FIELD_LIMITS.textShort), limitText(req.body?.notes ?? '', FIELD_LIMITS.textBody), 0, nowIso()]);
+  const r = await db.run('INSERT INTO gear (name, category, brand, notes, packed, createdAt, ownerUserId) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [name, req.body?.category ?? 'Other', limitText(req.body?.brand ?? '', FIELD_LIMITS.textShort), limitText(req.body?.notes ?? '', FIELD_LIMITS.textBody), 0, nowIso(), user.id]);
   const row = await db.get('SELECT * FROM gear WHERE id = ?', [r.lastInsertRowid]);
   res.json(mapGear(row));
 }));
 app.put('/api/gear/:id', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
   if (profanityFail(res, req.body?.name, req.body?.brand, req.body?.notes)) return;
   const cur = await db.get('SELECT * FROM gear WHERE id = ?', [req.params.id]);
-  if (!cur) return bad(res, 404, 'Gear not found.');
+  if (!cur || !ownsPrivate((cur as any).ownerUserId, user.id)) return bad(res, 404, 'Gear not found.');
   await db.run('UPDATE gear SET name=?, category=?, brand=?, notes=?, packed=? WHERE id=?',
     [limitText(req.body?.name ?? cur.name, FIELD_LIMITS.gearName), req.body?.category ?? cur.category, limitText(req.body?.brand ?? cur.brand, FIELD_LIMITS.textShort), limitText(req.body?.notes ?? cur.notes, FIELD_LIMITS.textBody), req.body?.packed !== undefined ? (req.body.packed ? 1 : 0) : (toBool(cur.packed) ? 1 : 0), req.params.id]);
   const row = await db.get('SELECT * FROM gear WHERE id = ?', [req.params.id]);
   res.json(mapGear(row));
 }));
 app.delete('/api/gear/:id', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
+  const cur = await db.get('SELECT * FROM gear WHERE id = ?', [req.params.id]);
+  if (!cur || !ownsPrivate((cur as any).ownerUserId, user.id)) return bad(res, 404, 'Gear not found.');
   await db.run('DELETE FROM gear WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 }));
 
 // Hunts
-app.get('/api/hunts', wrap(async (_req, res, db) => {
+app.get('/api/hunts', wrap(async (req, res, db) => {
+  const uid = requestUserId(req);
   const rows = await db.all('SELECT * FROM hunts ORDER BY date DESC');
-  res.json(rows.map(mapHunt));
+  res.json(rows.filter((r: any) => ownsPrivate(r.ownerUserId, uid)).map(mapHunt));
 }));
 app.post('/api/hunts', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   if (profanityFail(res, req.body?.species, req.body?.stand, req.body?.notes)) return;
-  const r = await db.run('INSERT INTO hunts (date, species, stand, notes, harvested, campId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [req.body?.date ?? new Date().toISOString().slice(0, 10), limitText(req.body?.species ?? '', FIELD_LIMITS.textShort), limitText(req.body?.stand ?? '', FIELD_LIMITS.textShort), limitText(req.body?.notes ?? '', FIELD_LIMITS.textBody), req.body?.harvested ? 1 : 0, req.body?.campId ?? null, nowIso()]);
+  const r = await db.run('INSERT INTO hunts (date, species, stand, notes, harvested, campId, createdAt, ownerUserId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [req.body?.date ?? new Date().toISOString().slice(0, 10), limitText(req.body?.species ?? '', FIELD_LIMITS.textShort), limitText(req.body?.stand ?? '', FIELD_LIMITS.textShort), limitText(req.body?.notes ?? '', FIELD_LIMITS.textBody), req.body?.harvested ? 1 : 0, req.body?.campId ?? null, nowIso(), user.id]);
   const row = await db.get('SELECT * FROM hunts WHERE id = ?', [r.lastInsertRowid]);
   res.json(mapHunt(row));
 }));
 app.put('/api/hunts/:id', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
   if (profanityFail(res, req.body?.species, req.body?.stand, req.body?.notes)) return;
   const cur = await db.get('SELECT * FROM hunts WHERE id = ?', [req.params.id]);
-  if (!cur) return bad(res, 404, 'Hunt not found.');
+  if (!cur || !ownsPrivate((cur as any).ownerUserId, user.id)) return bad(res, 404, 'Hunt not found.');
   await db.run('UPDATE hunts SET date=?, species=?, stand=?, notes=?, harvested=?, campId=? WHERE id=?',
     [req.body?.date ?? cur.date, limitText(req.body?.species ?? cur.species, FIELD_LIMITS.textShort), limitText(req.body?.stand ?? cur.stand, FIELD_LIMITS.textShort), limitText(req.body?.notes ?? cur.notes, FIELD_LIMITS.textBody), req.body?.harvested !== undefined ? (req.body.harvested ? 1 : 0) : (toBool(cur.harvested) ? 1 : 0), req.body?.campId ?? (cur as any).campId ?? null, req.params.id]);
   const row = await db.get('SELECT * FROM hunts WHERE id = ?', [req.params.id]);
   res.json(mapHunt(row));
 }));
 app.delete('/api/hunts/:id', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
+  const cur = await db.get('SELECT * FROM hunts WHERE id = ?', [req.params.id]);
+  if (!cur || !ownsPrivate((cur as any).ownerUserId, user.id)) return bad(res, 404, 'Hunt not found.');
   await db.run('DELETE FROM hunts WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 }));
@@ -685,7 +759,8 @@ app.delete('/api/hunts/:id', wrap(async (req, res, db) => {
 // Licenses & Tags (private to the account)
 app.get('/api/licenses', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
-  const rows = await db.all('SELECT * FROM licenses ORDER BY expiryDate ASC');
+  const all = await db.all('SELECT * FROM licenses ORDER BY expiryDate ASC');
+  const rows = all.filter((r: any) => ownsPrivate(r.ownerUserId, user.id));
   const out = [];
   for (const r of rows) {
     const tags = await db.all('SELECT * FROM license_tags WHERE licenseId = ? ORDER BY createdAt ASC', [r.id]);
@@ -698,8 +773,8 @@ app.post('/api/licenses', wrap(async (req, res, db) => {
   const b = req.body ?? {};
   if (!String(b.state ?? '').trim() || !String(b.kind ?? '').trim()) return bad(res, 400, 'State and kind are required.');
   if (profanityFail(res, b.kind, b.licenseNumber, b.coverage, b.notes)) return;
-  const r = await db.run('INSERT INTO licenses (state, kind, licenseNumber, issuedDate, expiryDate, coverage, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [b.state, limitText(b.kind, FIELD_LIMITS.textShort), limitText(b.licenseNumber ?? '', FIELD_LIMITS.licenseNumber), b.issuedDate ?? '', b.expiryDate ?? '', limitText(b.coverage ?? '', FIELD_LIMITS.textShort), limitText(b.notes ?? '', FIELD_LIMITS.textBody), nowIso()]);
+  const r = await db.run('INSERT INTO licenses (state, kind, licenseNumber, issuedDate, expiryDate, coverage, notes, createdAt, ownerUserId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [b.state, limitText(b.kind, FIELD_LIMITS.textShort), limitText(b.licenseNumber ?? '', FIELD_LIMITS.licenseNumber), b.issuedDate ?? '', b.expiryDate ?? '', limitText(b.coverage ?? '', FIELD_LIMITS.textShort), limitText(b.notes ?? '', FIELD_LIMITS.textBody), nowIso(), user.id]);
   const row = await db.get('SELECT * FROM licenses WHERE id = ?', [r.lastInsertRowid]);
   res.json({ ...mapLicense(row), tags: [] });
 }));
@@ -707,7 +782,7 @@ app.put('/api/licenses/:id', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   if (profanityFail(res, req.body?.kind, req.body?.licenseNumber, req.body?.coverage, req.body?.notes)) return;
   const cur = await db.get('SELECT * FROM licenses WHERE id = ?', [req.params.id]);
-  if (!cur) return bad(res, 404, 'License not found.');
+  if (!cur || !ownsPrivate((cur as any).ownerUserId, user.id)) return bad(res, 404, 'License not found.');
   const b = req.body ?? {};
   await db.run('UPDATE licenses SET state=?, kind=?, licenseNumber=?, issuedDate=?, expiryDate=?, coverage=?, notes=? WHERE id=?',
     [b.state ?? cur.state, limitText(b.kind ?? cur.kind, FIELD_LIMITS.textShort), limitText(b.licenseNumber ?? cur.licenseNumber, FIELD_LIMITS.licenseNumber), b.issuedDate ?? cur.issuedDate, b.expiryDate ?? cur.expiryDate, limitText(b.coverage ?? cur.coverage, FIELD_LIMITS.textShort), limitText(b.notes ?? cur.notes, FIELD_LIMITS.textBody), req.params.id]);
@@ -716,12 +791,17 @@ app.put('/api/licenses/:id', wrap(async (req, res, db) => {
   res.json({ ...mapLicense(row), tags: tags.map(mapTag) });
 }));
 app.delete('/api/licenses/:id', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
+  const cur = await db.get('SELECT * FROM licenses WHERE id = ?', [req.params.id]);
+  if (!cur || !ownsPrivate((cur as any).ownerUserId, user.id)) return bad(res, 404, 'License not found.');
   await db.run('DELETE FROM license_tags WHERE licenseId = ?', [req.params.id]);
   await db.run('DELETE FROM licenses WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 }));
 app.post('/api/licenses/:id/tags', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
+  const lic = await db.get('SELECT * FROM licenses WHERE id = ?', [req.params.id]);
+  if (!lic || !ownsPrivate((lic as any).ownerUserId, user.id)) return bad(res, 404, 'License not found.');
   const b = req.body ?? {};
   if (!String(b.animal ?? '').trim() || !String(b.tagNumber ?? '').trim()) return bad(res, 400, 'Animal and tag number are required.');
   if (profanityFail(res, b.animal, b.kind, b.tagNumber)) return;
@@ -732,12 +812,20 @@ app.post('/api/licenses/:id/tags', wrap(async (req, res, db) => {
 }));
 app.post('/api/licenses/tags/:tagId/fill', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
+  const tag = await db.get<any>('SELECT * FROM license_tags WHERE id = ?', [req.params.tagId]);
+  if (!tag) return bad(res, 404, 'Tag not found.');
+  const lic = await db.get('SELECT * FROM licenses WHERE id = ?', [tag.licenseId]);
+  if (!lic || !ownsPrivate((lic as any).ownerUserId, user.id)) return bad(res, 404, 'Tag not found.');
   await db.run('UPDATE license_tags SET filled = 1, filledDate = ? WHERE id = ?', [new Date().toISOString().slice(0, 10), req.params.tagId]);
   const row = await db.get('SELECT * FROM license_tags WHERE id = ?', [req.params.tagId]);
-  if (!row) return bad(res, 404, 'Tag not found.');
   res.json(mapTag(row));
 }));
 app.delete('/api/licenses/tags/:tagId', wrap(async (req, res, db) => {
+  const user = requireAuth(req, res); if (!user) return;
+  const tag = await db.get<any>('SELECT * FROM license_tags WHERE id = ?', [req.params.tagId]);
+  if (!tag) return bad(res, 404, 'Tag not found.');
+  const lic = await db.get('SELECT * FROM licenses WHERE id = ?', [tag.licenseId]);
+  if (!lic || !ownsPrivate((lic as any).ownerUserId, user.id)) return bad(res, 404, 'Tag not found.');
   await db.run('DELETE FROM license_tags WHERE id = ?', [req.params.tagId]);
   res.json({ ok: true });
 }));
@@ -754,14 +842,25 @@ function mapSettings(r: any) {
     notifyBadges: toBool(r.notifyBadges ?? 1), notifyWind: toBool(r.notifyWind ?? 1),
   };
 }
-app.get('/api/settings', wrap(async (_req, res, db) => {
-  const row = await db.get('SELECT * FROM app_settings WHERE id = 1');
-  res.json(mapSettings(row));
+/** The settings row belonging to the signed-in account (per-account
+ *  since the multi-user build-out; local mode keeps its single row). */
+async function settingsRowForUser(db: Db, req: AuthedRequest): Promise<any | null> {
+  const uid = requestUserId(req);
+  if (authConfigured() && uid) {
+    const rows = await db.all<any>('SELECT * FROM app_settings ORDER BY id ASC');
+    return rows.find(r => sameAccount(r.ownerUserId, uid)) ?? null;
+  }
+  const row = await db.get('SELECT * FROM app_settings ORDER BY id ASC LIMIT 1');
+  return row ?? null;
+}
+app.get('/api/settings', wrap(async (req, res, db) => {
+  res.json(mapSettings(await settingsRowForUser(db, req)));
 }));
 app.put('/api/settings', wrap(async (req, res, db) => {
   const user = requireAuth(req, res); if (!user) return;
   const b = req.body ?? {};
-  const cur = mapSettings(await db.get('SELECT * FROM app_settings WHERE id = 1'));
+  const existing = await settingsRowForUser(db, req);
+  const cur = mapSettings(existing);
   const m = {
     theme: ['system', 'light', 'dark'].includes(b.theme) ? b.theme : cur.theme,
     units: ['imperial', 'metric'].includes(b.units) ? b.units : cur.units,
@@ -775,29 +874,34 @@ app.put('/api/settings', wrap(async (req, res, db) => {
     notifyBadges: b.notifyBadges !== undefined ? (b.notifyBadges ? 1 : 0) : (cur.notifyBadges ? 1 : 0),
     notifyWind: b.notifyWind !== undefined ? (b.notifyWind ? 1 : 0) : (cur.notifyWind ? 1 : 0),
   };
-  await db.run(
-    `INSERT INTO app_settings (id, theme, units, defaultMapView, profileVisibility, discoverable, notifyCampChat, notifyTrophyActivity, notifyStandActivity, notifyCommunity, notifyBadges, notifyWind)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET theme=excluded.theme, units=excluded.units, defaultMapView=excluded.defaultMapView, profileVisibility=excluded.profileVisibility, discoverable=excluded.discoverable, notifyCampChat=excluded.notifyCampChat, notifyTrophyActivity=excluded.notifyTrophyActivity, notifyStandActivity=excluded.notifyStandActivity, notifyCommunity=excluded.notifyCommunity, notifyBadges=excluded.notifyBadges, notifyWind=excluded.notifyWind`,
-    [m.theme, m.units, m.defaultMapView, m.profileVisibility, m.discoverable, m.notifyCampChat, m.notifyTrophyActivity, m.notifyStandActivity, m.notifyCommunity, m.notifyBadges, m.notifyWind]
-  ).catch(async () => {
-    const exists = await db.get('SELECT id FROM app_settings WHERE id = 1');
-    if (exists) await db.run('UPDATE app_settings SET theme=?, units=?, defaultMapView=?, profileVisibility=?, discoverable=?, notifyCampChat=?, notifyTrophyActivity=?, notifyStandActivity=?, notifyCommunity=?, notifyBadges=?, notifyWind=? WHERE id=1', [m.theme, m.units, m.defaultMapView, m.profileVisibility, m.discoverable, m.notifyCampChat, m.notifyTrophyActivity, m.notifyStandActivity, m.notifyCommunity, m.notifyBadges, m.notifyWind]);
-    else await db.run('INSERT INTO app_settings (id, theme, units, defaultMapView, profileVisibility, discoverable, notifyCampChat, notifyTrophyActivity, notifyStandActivity, notifyCommunity, notifyBadges, notifyWind) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [m.theme, m.units, m.defaultMapView, m.profileVisibility, m.discoverable, m.notifyCampChat, m.notifyTrophyActivity, m.notifyStandActivity, m.notifyCommunity, m.notifyBadges, m.notifyWind]);
-  });
-  res.json(mapSettings(await db.get('SELECT * FROM app_settings WHERE id = 1')));
+  if (existing) {
+    await db.run('UPDATE app_settings SET theme=?, units=?, defaultMapView=?, profileVisibility=?, discoverable=?, notifyCampChat=?, notifyTrophyActivity=?, notifyStandActivity=?, notifyCommunity=?, notifyBadges=?, notifyWind=? WHERE id=?',
+      [m.theme, m.units, m.defaultMapView, m.profileVisibility, m.discoverable, m.notifyCampChat, m.notifyTrophyActivity, m.notifyStandActivity, m.notifyCommunity, m.notifyBadges, m.notifyWind, (existing as any).id]);
+  } else {
+    await db.run('INSERT INTO app_settings (theme, units, defaultMapView, profileVisibility, discoverable, notifyCampChat, notifyTrophyActivity, notifyStandActivity, notifyCommunity, notifyBadges, notifyWind, ownerUserId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [m.theme, m.units, m.defaultMapView, m.profileVisibility, m.discoverable, m.notifyCampChat, m.notifyTrophyActivity, m.notifyStandActivity, m.notifyCommunity, m.notifyBadges, m.notifyWind, user.id]);
+  }
+  res.json(mapSettings(await settingsRowForUser(db, req)));
 }));
 
 // Badges — computed live from real activity
 async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?: string): Promise<Activity> {
   const inRange = (sql: string, params: unknown[]) => db.all(sql, params);
-  const hunts = await db.all<any>('SELECT * FROM hunts');
+  // Activity is per-account: a hunter's badges come from their own hunts,
+  // pins, camps and posts — never from anyone else's.
+  const myUid = uid ?? '';
+  const profiles = await db.all<any>('SELECT * FROM profile ORDER BY id ASC');
+  const myProfile = profiles.find(r => sameAccount(r.ownerUserId, myUid)) ?? (!authConfigured() ? profiles[0] : undefined);
+  const myName = myProfile ? `${myProfile.firstName ?? ''} ${myProfile.lastName ?? ''}`.trim() : '';
+  const allHunts = await db.all<any>('SELECT * FROM hunts');
+  const hunts = allHunts.filter(h => ownsPrivate(h.ownerUserId, myUid));
   const huntsIn = sinceIso ? hunts.filter(h => h.date >= sinceIso.slice(0, 10) && h.date <= (untilIso ?? '9999').slice(0, 10)) : hunts;
   const harvested = hunts.filter(h => toBool(h.harvested));
   const photos = await db.all<any>('SELECT * FROM photos');
   const cposts = await db.all<any>('SELECT * FROM community_posts');
-  const myName = await (async () => { const row = await db.get<any>('SELECT firstName, lastName FROM profile WHERE id = 1'); return `${row?.firstName ?? ''} ${row?.lastName ?? ''}`.trim(); })();
-  const isMine = (r: any) => (uid && sameAccount(r.authorUserId, uid)) || r.authorName === myName || r.authorName === myName.split(' ')[0];
+  // Authorship by account id; the name match is only a fallback for
+  // legacy rows that carry no account id at all.
+  const isMine = (r: any) => (myUid && sameAccount(r.authorUserId, myUid)) || (!r.authorUserId && !!myName && (r.authorName === myName || r.authorName === myName.split(' ')[0]));
   const myPhotosAll = photos.filter(isMine);
   const myCPostsAll = cposts.filter(isMine);
   // Season-scoped calls (Season Recap) only count in-season activity.
@@ -840,14 +944,16 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
   }
   // Season-scoped calls count only in-season harvests.
   const harvestedIn = sinceIso ? harvested.filter(h => h.date >= sinceIso.slice(0, 10) && h.date <= (untilIso ?? '9999').slice(0, 10)) : harvested;
-  const pins = await db.all<any>('SELECT createdAt FROM pins');
-  const trails = await db.all<any>('SELECT createdAt FROM trails');
-  const checkins = await db.all<any>('SELECT * FROM checkins');
+  const isMyWork = (r: any) => (myUid && sameAccount(r.createdByUserId, myUid)) || (!r.createdByUserId && !!myName && r.createdBy === myName);
+  const pins = (await db.all<any>('SELECT createdAt, createdBy, createdByUserId FROM pins')).filter(isMyWork);
+  const trails = (await db.all<any>('SELECT createdAt, createdByUserId FROM trails')).filter(isMyWork);
+  const isMyStand = (r: any) => (myUid && sameAccount(r.userId, myUid)) || (!r.userId && !!myName && r.userName === myName);
+  const checkins = (await db.all<any>('SELECT * FROM checkins')).filter(isMyStand);
   const messages = await db.all<any>('SELECT * FROM messages');
-  const myMessages = messages.filter(m => (uid && sameAccount(m.authorUserId, uid)) || m.authorName === myName || m.authorName === myName.split(' ')[0]);
-  const friends = await db.all<any>('SELECT createdAt FROM friends');
-  const camps = await db.all<any>('SELECT createdAt FROM camps');
-  const reservations = await db.all<any>('SELECT createdAt FROM reservations');
+  const myMessages = messages.filter(isMine);
+  const friends = (await db.all<any>('SELECT createdAt, ownerUserId FROM friends')).filter(r => ownsPrivate(r.ownerUserId, myUid));
+  const camps = (await db.all<any>('SELECT createdAt, ownerUserId FROM camps')).filter(r => isOwner(r.ownerUserId, myUid));
+  const reservations = (await db.all<any>('SELECT createdAt, userId, userName FROM reservations')).filter(isMyStand);
   let likesReceived = 0;
   for (const p of myPhotos) {
     const l = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM photo_likes WHERE photoId = ?', [p.id]);
@@ -857,7 +963,7 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
     const l = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM community_post_likes WHERE postId = ?', [p.id]);
     likesReceived += Number(l?.c ?? 0);
   }
-  const profile = await db.get<any>('SELECT createdAt FROM profile WHERE id = 1');
+  const profile = myProfile;
   const d10 = (v: unknown) => (v ? toIso(v as string).slice(0, 10) : '');
   return {
     hunts: huntsIn.length, harvests: harvestedIn.length + myPhotos.length + myCPosts.length, bucks, does, turkeys,
@@ -866,7 +972,7 @@ async function buildActivity(db: Db, uid?: string, sinceIso?: string, untilIso?:
     trophyLikesReceived: likesReceived, friends: friends.length,
     campsCreated: camps.length, reservations: reservations.length,
     trophyPosts: myPhotos.length + myCPosts.length,
-    accountCreatedAt: profile?.createdAt ? toIso(profile.createdAt).slice(0, 10) : '2026-11-13',
+    accountCreatedAt: profile?.createdAt ? toIso(profile.createdAt).slice(0, 10) : '',
     dates: {
       hunts: huntsIn.map(h => h.date).filter(Boolean),
       harvests: harvestEvents.map(e => e.date).filter(Boolean),
@@ -947,7 +1053,7 @@ app.get('/api/camps/:id/wind', wrap(async (req, res, db) => {
 app.get('/api/camps/:id/go-hunt', wrap(async (req, res, db) => {
   const camp = await db.get('SELECT * FROM camps WHERE id = ?', [req.params.id]);
   if (!camp) return bad(res, 404, 'Camp not found.');
-  const profile = await db.get('SELECT * FROM profile WHERE id = 1');
+  const profile = await profileRowForUser(db, req);
   try {
     const wind = await getWindForCamp(db, camp, req.query.refresh === '1');
     const pins = await db.all('SELECT * FROM pins WHERE campId = ? AND pinType IN (\'stand\', \'blind\')', [req.params.id]);
@@ -958,9 +1064,15 @@ app.get('/api/camps/:id/go-hunt', wrap(async (req, res, db) => {
     res.status(502).json({ error: 'Weather is unavailable right now. Try again in a bit. (' + (e instanceof Error ? e.message : String(e)) + ')' });
   }
 }));
-app.get('/api/hunt-now', wrap(async (_req, res, db) => {
-  const profile = await db.get('SELECT * FROM profile WHERE id = 1');
-  const camps = await db.all('SELECT * FROM camps ORDER BY createdAt DESC');
+app.get('/api/hunt-now', wrap(async (req, res, db) => {
+  const profile = await profileRowForUser(db, req);
+  let camps = await db.all<any>('SELECT * FROM camps ORDER BY createdAt DESC');
+  if (authConfigured()) {
+    const uid = requestUserId(req);
+    const members = await db.all<any>('SELECT campId, userId FROM camp_members');
+    const memberCampIds = new Set(members.filter(m => sameAccount(m.userId, uid)).map(m => m.campId));
+    camps = camps.filter(c => isOwner(c.ownerUserId, uid) || memberCampIds.has(c.id));
+  }
   const results = [];
   for (const camp of camps) {
     if (!(camp as any).centerLat || !(camp as any).centerLng) continue;
@@ -1143,7 +1255,7 @@ app.delete('/api/community/posts/:postId', wrap(async (req, res, db) => {
 
 // Leaderboard — totals only, never a breakdown of how points are tallied.
 app.get('/api/community/leaderboard', wrap(async (req, res, db) => {
-  const profile = await db.get('SELECT * FROM profile WHERE id = 1');
+  const profile = await profileRowForUser(db, req);
   const myName = `${(profile as any)?.firstName ?? ''} ${(profile as any)?.lastName ?? ''}`.trim();
   const scope = String(req.query.scope ?? 'everyone');
   const state = String(req.query.state ?? '');
@@ -1198,12 +1310,16 @@ app.get('/api/recap', wrap(async (req, res, db) => {
   const start = new Date(startYear, 8, 1);
   const end = new Date(startYear + 1, 7, 31, 23, 59, 59);
   const inSeason = (iso: string) => { const d = new Date(iso); return d >= start && d <= end; };
-  const hunts = (await db.all('SELECT * FROM hunts')).filter((h: any) => h.date >= start.toISOString().slice(0, 10) && h.date <= end.toISOString().slice(0, 10));
+  // The recap is personal: only the signed-in hunter's own season counts.
+  const myUid = requestUserId(req);
+  const myNameR = await myDisplayName(db, req);
+  const isMyPost = (p: any) => sameAccount(p.authorUserId, myUid) || (!p.authorUserId && !!myNameR && p.authorName === myNameR);
+  const hunts = (await db.all('SELECT * FROM hunts')).filter((h: any) => ownsPrivate(h.ownerUserId, myUid) && h.date >= start.toISOString().slice(0, 10) && h.date <= end.toISOString().slice(0, 10));
   const harvested = hunts.filter((h: any) => toBool(h.harvested));
   const daysAfield = new Set(hunts.map((h: any) => h.date)).size;
   const species = [...new Set(hunts.map((h: any) => h.species).filter(Boolean))];
-  const photos = (await db.all('SELECT * FROM photos')).filter((p: any) => inSeason(p.createdAt));
-  const cPosts = (await db.all('SELECT * FROM community_posts')).filter((p: any) => inSeason(p.createdAt));
+  const photos = (await db.all('SELECT * FROM photos')).filter((p: any) => isMyPost(p) && inSeason(p.createdAt));
+  const cPosts = (await db.all('SELECT * FROM community_posts')).filter((p: any) => isMyPost(p) && inSeason(p.createdAt));
   let likes = 0, comments = 0;
   for (const p of photos) {
     const l = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM photo_likes WHERE photoId = ?', [p.id]);
@@ -1219,8 +1335,7 @@ app.get('/api/recap', wrap(async (req, res, db) => {
     ...photos.map((p: any) => ({ authorName: p.authorName, authorId: p.authorUserId ?? null, species: p.species ?? '', harvestClass: p.harvestClass ?? '', weightLbs: p.weightLbs ?? null, antlerScore: p.antlerScore ?? null, antlerPoints: p.antlerPoints ?? null, likes: 0, comments: 0, createdAt: toIso(p.createdAt) })),
     ...cPosts.map((p: any) => ({ authorName: p.authorName, authorId: p.authorUserId ?? null, species: p.species ?? '', harvestClass: p.harvestClass ?? '', weightLbs: p.weightLbs ?? null, antlerScore: p.antlerScore ?? null, antlerPoints: p.antlerPoints ?? null, likes: 0, comments: 0, createdAt: toIso(p.createdAt) })),
   ];
-  const myName = await myDisplayName(db, req);
-  const myPosts = allPosts.filter(p => sameAccount(p.authorId, requestUserId(req)) || p.authorName === myName || p.authorName === myName.split(' ')[0]);
+  const myPosts = allPosts.filter(p => sameAccount(p.authorId, myUid) || (!p.authorId && !!myNameR && (p.authorName === myNameR || p.authorName === myNameR.split(' ')[0])));
   const lb = buildLeaderboard(myPosts);
   const seasonScore = lb.length ? lb[0].score : 0;
   let biggestBuck: number | null = null, heaviest: number | null = null;
@@ -1228,8 +1343,9 @@ app.get('/api/recap', wrap(async (req, res, db) => {
     if ((p.harvestClass || '').toLowerCase() === 'buck' && p.antlerScore) biggestBuck = Math.max(biggestBuck ?? 0, p.antlerScore);
     if (p.weightLbs) heaviest = Math.max(heaviest ?? 0, p.weightLbs);
   }
-  const checkins = (await db.all('SELECT * FROM checkins')).filter((c: any) => inSeason(c.checkedInAt));
-  const reservations = (await db.all('SELECT * FROM reservations')).filter((r: any) => r.date >= start.toISOString().slice(0, 10) && r.date <= end.toISOString().slice(0, 10));
+  const isMyStandR = (r: any) => sameAccount(r.userId, myUid) || (!r.userId && !!myNameR && r.userName === myNameR);
+  const checkins = (await db.all('SELECT * FROM checkins')).filter((c: any) => isMyStandR(c) && inSeason(c.checkedInAt));
+  const reservations = (await db.all('SELECT * FROM reservations')).filter((r: any) => isMyStandR(r) && r.date >= start.toISOString().slice(0, 10) && r.date <= end.toISOString().slice(0, 10));
   const standsHunted = new Set(checkins.map((c: any) => c.pinId)).size;
   // Badges earned in this season: badges whose underlying activity happened
   // in the season (approximated from season-filtered activity).
@@ -1237,8 +1353,8 @@ app.get('/api/recap', wrap(async (req, res, db) => {
   const seasonBadges = computeBadges(seasonActivity).filter(b => b.earned);
   const hasActivity = hunts.length > 0 || photos.length > 0 || cPosts.length > 0 || checkins.length > 0;
   const availableSeasons: number[] = [];
-  const allHunts = await db.all('SELECT date FROM hunts');
-  const allPhotoDates = await db.all('SELECT createdAt FROM photos');
+  const allHunts = (await db.all('SELECT date, ownerUserId FROM hunts')).filter((h: any) => ownsPrivate(h.ownerUserId, myUid));
+  const allPhotoDates = [...(await db.all('SELECT createdAt, authorUserId FROM photos')), ...(await db.all('SELECT createdAt, authorUserId FROM community_posts'))].filter((p: any) => isMyPost(p));
   for (const h of allHunts) { const y = seasonOf(new Date(h.date + 'T00:00:00')).start.getFullYear(); if (!availableSeasons.includes(y)) availableSeasons.push(y); }
   for (const p of allPhotoDates) { const y = seasonOf(new Date(p.createdAt)).start.getFullYear(); if (!availableSeasons.includes(y)) availableSeasons.push(y); }
   availableSeasons.sort((a, b) => b - a);
