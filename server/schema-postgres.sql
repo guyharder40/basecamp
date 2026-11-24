@@ -266,5 +266,3 @@ CREATE TABLE IF NOT EXISTS camp_wind_cache (
 );
 DROP TABLE IF EXISTS spots;
 DROP TABLE IF EXISTS trips;
-
-CREATE UNIQUE INDEX IF NOT EXISTS profile_username_unique ON profile (LOWER(username)) WHERE username <> '';

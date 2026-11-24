@@ -148,7 +148,16 @@ export function getDb(): Promise<Db> {
           if (existsSync(p)) { schemaSql = readFileSync(p, 'utf8'); break; }
         }
       }
-      if (schemaSql) await db.exec(schemaSql);
+      if (schemaSql) {
+        // Never let a schema statement take the whole app down: on an
+        // existing database every CREATE here is a no-op, and the column
+        // migrations below are what bring an old database up to date.
+        // (2026-11-23: a CREATE INDEX on a just-added column inside this
+        // schema aborted the whole boot on the deployed database, whose
+        // profile table predated the column — every request failed.)
+        try { await db.exec(schemaSql); }
+        catch (e) { console.error('Schema exec failed (continuing to migrations):', e); }
+      }
       else console.error('Basecamp schema not found (neither bundled nor on disk) — tables will not be created.');
     } else {
       const sqlitePath = process.env.SQLITE_PATH || (process.env.VERCEL ? '/tmp/basecamp.db' : join(ROOT, 'data', 'basecamp.db'));
@@ -156,7 +165,10 @@ export function getDb(): Promise<Db> {
       db = new SqliteDb(sqlitePath);
       const schemaPath = join(ROOT, 'server', 'schema.sql');
       console.log(`Basecamp schema: ${schemaPath} exists=${existsSync(schemaPath)}`);
-      if (existsSync(schemaPath)) await db.exec(readFileSync(schemaPath, 'utf8'));
+      if (existsSync(schemaPath)) {
+        try { await db.exec(readFileSync(schemaPath, 'utf8')); }
+        catch (e) { console.error('Schema exec failed (continuing to migrations):', e); }
+      }
     }
     // Migrate existing databases created before 2026-11-17 (new columns).
     // Postgres supports ADD COLUMN IF NOT EXISTS; SQLite does not, so each
