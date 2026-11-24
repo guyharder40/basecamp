@@ -192,6 +192,7 @@ export function getDb(): Promise<Db> {
       { table: 'app_settings', column: 'ownerUserId', ddlSqlite: "ALTER TABLE app_settings ADD COLUMN ownerUserId TEXT NOT NULL DEFAULT ''", ddlPg: "ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS ownerUserId TEXT NOT NULL DEFAULT ''" },
       { table: 'pins', column: 'createdByUserId', ddlSqlite: "ALTER TABLE pins ADD COLUMN createdByUserId TEXT NOT NULL DEFAULT ''", ddlPg: "ALTER TABLE pins ADD COLUMN IF NOT EXISTS createdByUserId TEXT NOT NULL DEFAULT ''" },
       { table: 'trails', column: 'createdByUserId', ddlSqlite: "ALTER TABLE trails ADD COLUMN createdByUserId TEXT NOT NULL DEFAULT ''", ddlPg: "ALTER TABLE trails ADD COLUMN IF NOT EXISTS createdByUserId TEXT NOT NULL DEFAULT ''" },
+      { table: 'profile', column: 'username', ddlSqlite: "ALTER TABLE profile ADD COLUMN username TEXT NOT NULL DEFAULT ''", ddlPg: "ALTER TABLE profile ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT ''" },
     ];
     for (const m of migrations) {
       try { await db.exec(db.kind === 'postgres' ? m.ddlPg : m.ddlSqlite); }
@@ -212,6 +213,11 @@ export function getDb(): Promise<Db> {
         try { await db.exec(sql); } catch (e) { console.error('PG singleton fix failed:', e); }
       }
     }
+    // Usernames are unique across hunters (case-insensitive); the partial
+    // index leaves the many not-yet-chosen empty usernames alone. Runs on
+    // both dialects — SQLite and Postgres both support expression indexes.
+    try { await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS profile_username_unique ON profile (LOWER(username)) WHERE username <> ''"); }
+    catch (e) { console.error('Username index failed:', e); }
     // Seed from data/seed.json on first run (empty profile table)
     try {
       const count = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM profile');

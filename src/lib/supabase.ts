@@ -168,11 +168,33 @@ export async function signInEmail(email: string, password: string) {
   if (error) throw error;
   return data;
 }
-export async function signUpEmail(email: string, password: string) {
+export async function signUpEmail(email: string, password: string, profile?: { firstName: string; lastName: string; username: string }) {
   const c = await requireClient();
-  const { data, error } = await c.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+  const { data, error } = await c.auth.signUp({
+    email, password,
+    options: {
+      emailRedirectTo: window.location.origin,
+      // Carried on the account so the first-run profile setup can be
+      // prefilled with what the hunter typed on the create-account form.
+      data: profile ? { first_name: profile.firstName, last_name: profile.lastName, username: profile.username } : undefined,
+    },
+  });
   if (error) throw error;
   return data;
+}
+/** Who the current session belongs to, including the name/username
+ *  captured at sign-up (user metadata). Null when signed out. */
+export async function sessionUser(): Promise<{ email: string; firstName: string; lastName: string; username: string } | null> {
+  const s: any = await getSession();
+  const u = s?.user;
+  if (!u) return null;
+  const md = u.user_metadata ?? {};
+  return {
+    email: u.email ?? '',
+    firstName: typeof md.first_name === 'string' ? md.first_name : '',
+    lastName: typeof md.last_name === 'string' ? md.last_name : '',
+    username: typeof md.username === 'string' ? md.username : '',
+  };
 }
 export async function signInMagicLink(email: string) {
   const c = await requireClient();

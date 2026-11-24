@@ -245,3 +245,9 @@ input.color-box { width:56px; height:38px; flex:none; padding:2px; border-radius
 /* The pre-SVG badge design drew ribbon tails with cell pseudo-elements;
    they must not paint over the new medallions. */
 .badge-cell.earned::before, .badge-cell.earned::after { content:none; }
+
+/* Password field with show/hide eye (sign-in + create account) */
+.pw-wrap { position:relative; }
+.pw-wrap input { padding-right:46px; }
+.pw-eye { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:36px; height:36px; display:flex; align-items:center; justify-content:center; background:transparent; border:none; border-radius:10px; color:var(--muted); cursor:pointer; padding:0; }
+.pw-eye:hover { color:var(--text); background:var(--hover); }

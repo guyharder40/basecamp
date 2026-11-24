@@ -16,6 +16,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 export const api = {
   health: () => req<{ ok: boolean; db: string; auth: string }>('/api/health'),
   authStatus: () => req<{ configured: boolean; signedIn: boolean; userId: string | null; email: string | null; profileLinked: boolean; profileName: string }>('/api/auth/status'),
+  checkUsername: (u: string) => req<{ available: boolean; reason?: string }>(`/api/auth/username?u=${encodeURIComponent(u)}`),
   getProfile: () => req<Profile>('/api/profile'),
   updateProfile: (p: Partial<Profile>) => req<Profile>('/api/profile', { method: 'PUT', body: JSON.stringify(p) }),
   listFriends: () => req<Friend[]>('/api/friends'),

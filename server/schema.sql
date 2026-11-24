@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS profile (
   ownerUserId TEXT NOT NULL DEFAULT 'seed-owner',
   firstName TEXT NOT NULL DEFAULT '',
   lastName TEXT NOT NULL DEFAULT '',
+  username TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
   bio TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL DEFAULT '',
@@ -265,3 +266,5 @@ CREATE TABLE IF NOT EXISTS camp_wind_cache (
 );
 DROP TABLE IF EXISTS spots;
 DROP TABLE IF EXISTS trips;
+
+CREATE UNIQUE INDEX IF NOT EXISTS profile_username_unique ON profile (LOWER(username)) WHERE username <> '';

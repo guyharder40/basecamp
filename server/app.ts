@@ -138,6 +138,7 @@ function profanityFail(res: Response, ...texts: (string | undefined | null)[]): 
 // Row mappers
 const mapProfile = (r: any) => ({
   ownerUserId: r.ownerUserId ?? SEED_OWNER_ID,
+  username: r.username ?? '',
   firstName: r.firstName ?? '', lastName: r.lastName ?? '', displayName: `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim(),
   status: r.status ?? '', bio: r.bio ?? '', email: r.email ?? '', emailVisibility: r.emailVisibility ?? 'private',
   phone: r.phone ?? '', phoneVisibility: r.phoneVisibility ?? 'private', interests: parseJson(r.interests, []),
@@ -194,10 +195,13 @@ async function isCampOwner(db: Db, campId: number, userId: string): Promise<bool
 }
 /** The profile row belonging to the signed-in account. Profiles are
  *  per-account since the multi-user build-out; local mode (no auth
- *  configured) keeps the single row it has always had. */
+ *  configured) keeps the single row it has always had. With sign-in on,
+ *  an anonymous or new account simply has no profile yet — never hand
+ *  back somebody else's row. */
 async function profileRowForUser(db: Db, req: AuthedRequest): Promise<any | null> {
   const uid = requestUserId(req);
-  if (authConfigured() && uid) {
+  if (authConfigured()) {
+    if (!uid) return null;
     const rows = await db.all<any>('SELECT * FROM profile ORDER BY id ASC');
     return rows.find(r => sameAccount(r.ownerUserId, uid)) ?? null;
   }
@@ -235,10 +239,25 @@ app.get('/api/auth/status', wrap(async (req, res, db) => {
   });
 }));
 
+const USERNAME_RULE = /^[A-Za-z0-9_]{3,20}$/;
+const USERNAME_HELP = 'Username needs 3–20 characters: letters, numbers and underscores only.';
+/** Is this username free? (Public on purpose: the create-account form
+ *  checks before the account exists. Answers with a yes/no only.) */
+app.get('/api/auth/username', wrap(async (req, res, db) => {
+  const u = String(req.query.u ?? '').trim();
+  if (!USERNAME_RULE.test(u)) return res.json({ available: false, reason: USERNAME_HELP });
+  const rows = await db.all<any>('SELECT username FROM profile');
+  const taken = rows.some(r => String(r.username ?? '').toLowerCase() === u.toLowerCase());
+  if (!taken) return res.json({ available: true });
+  const mine = await profileRowForUser(db, req);
+  const isMine = !!mine && String(mine.username ?? '').toLowerCase() === u.toLowerCase();
+  res.json({ available: isMine });
+}));
+
 // Profile — always the signed-in account's own profile.
 app.get('/api/profile', wrap(async (req, res, db) => {
   const row = await profileRowForUser(db, req);
-  if (!row) return res.json({ firstName: '', lastName: '', displayName: '', status: '', bio: '', email: '', emailVisibility: 'private', phone: '', phoneVisibility: 'private', interests: [], huntingState: '', avatarUrl: '', bannerUrl: '', pinnedBadges: [], discoverable: true, profileVisibility: 'friends', createdAt: '' });
+  if (!row) return res.json({ username: '', firstName: '', lastName: '', displayName: '', status: '', bio: '', email: '', emailVisibility: 'private', phone: '', phoneVisibility: 'private', interests: [], huntingState: '', avatarUrl: '', bannerUrl: '', pinnedBadges: [], discoverable: true, profileVisibility: 'friends', createdAt: '' });
   res.json(mapProfile(row));
 }));
 app.put('/api/profile', wrap(async (req, res, db) => {
@@ -248,6 +267,7 @@ app.put('/api/profile', wrap(async (req, res, db) => {
   const existing = await profileRowForUser(db, req);
   const cur = existing ?? undefined;
   const merged = {
+    username: b.username !== undefined ? String(b.username).trim() : (cur?.username ?? ''),
     firstName: limitText(b.firstName ?? cur?.firstName ?? '', FIELD_LIMITS.textShort),
     lastName: limitText(b.lastName ?? cur?.lastName ?? '', FIELD_LIMITS.textShort),
     status: limitText(b.status ?? cur?.status ?? '', FIELD_LIMITS.textShort),
@@ -260,13 +280,27 @@ app.put('/api/profile', wrap(async (req, res, db) => {
     discoverable: b.discoverable !== undefined ? (b.discoverable ? 1 : 0) : (toBool(cur?.discoverable ?? 1) ? 1 : 0),
     profileVisibility: b.profileVisibility ?? cur?.profileVisibility ?? 'friends',
   };
-  if (existing) {
-    await db.run('UPDATE profile SET firstName=?, lastName=?, status=?, bio=?, email=?, emailVisibility=?, phone=?, phoneVisibility=?, interests=?, huntingState=?, avatarUrl=?, bannerUrl=?, pinnedBadges=?, discoverable=?, profileVisibility=? WHERE id=?',
-      [merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, (existing as any).id]);
-  } else {
-    // First save for this account: create its own profile row.
-    await db.run('INSERT INTO profile (ownerUserId, firstName, lastName, status, bio, email, emailVisibility, phone, phoneVisibility, interests, huntingState, avatarUrl, bannerUrl, pinnedBadges, discoverable, profileVisibility, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [user.id, merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, nowIso()]);
+  // Username: optional, but unique across every hunter when set.
+  if (merged.username) {
+    if (!USERNAME_RULE.test(merged.username)) return bad(res, 400, USERNAME_HELP);
+    const clash = await db.get<any>('SELECT id FROM profile WHERE LOWER(username) = LOWER(?)', [merged.username]);
+    if (clash && (!existing || Number((clash as any).id) !== Number((existing as any).id))) {
+      return bad(res, 409, 'That username is taken — please pick another.');
+    }
+  }
+  try {
+    if (existing) {
+      await db.run('UPDATE profile SET username=?, firstName=?, lastName=?, status=?, bio=?, email=?, emailVisibility=?, phone=?, phoneVisibility=?, interests=?, huntingState=?, avatarUrl=?, bannerUrl=?, pinnedBadges=?, discoverable=?, profileVisibility=? WHERE id=?',
+        [merged.username, merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, (existing as any).id]);
+    } else {
+      // First save for this account: create its own profile row.
+      await db.run('INSERT INTO profile (ownerUserId, username, firstName, lastName, status, bio, email, emailVisibility, phone, phoneVisibility, interests, huntingState, avatarUrl, bannerUrl, pinnedBadges, discoverable, profileVisibility, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [user.id, merged.username, merged.firstName, merged.lastName, merged.status, merged.bio, merged.email, merged.emailVisibility, merged.phone, merged.phoneVisibility, JSON.stringify(merged.interests), merged.huntingState, merged.avatarUrl, merged.bannerUrl, JSON.stringify(merged.pinnedBadges), merged.discoverable, merged.profileVisibility, nowIso()]);
+    }
+  } catch (e) {
+    // The unique index is the backstop if two hunters race for a name.
+    if (/unique|duplicate/i.test(e instanceof Error ? e.message : '')) return bad(res, 409, 'That username is taken — please pick another.');
+    throw e;
   }
   const row = await profileRowForUser(db, req);
   res.json(mapProfile(row));
@@ -846,7 +880,8 @@ function mapSettings(r: any) {
  *  since the multi-user build-out; local mode keeps its single row). */
 async function settingsRowForUser(db: Db, req: AuthedRequest): Promise<any | null> {
   const uid = requestUserId(req);
-  if (authConfigured() && uid) {
+  if (authConfigured()) {
+    if (!uid) return null;
     const rows = await db.all<any>('SELECT * FROM app_settings ORDER BY id ASC');
     return rows.find(r => sameAccount(r.ownerUserId, uid)) ?? null;
   }

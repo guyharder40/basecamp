@@ -1,7 +1,7 @@
 export type Visibility = 'public' | 'friends' | 'private';
 export type PinType = 'stand' | 'camera' | 'parking' | 'water' | 'foodplot' | 'blind' | 'cabin' | 'feeder' | 'harvest' | 'other';
 export type Session = 'morning' | 'afternoon' | 'evening' | 'all_day';
-export interface Profile { firstName: string; lastName: string; displayName: string; status: string; bio: string; email: string; emailVisibility: Visibility; phone: string; phoneVisibility: Visibility; interests: string[]; huntingState: string; avatarUrl?: string; bannerUrl?: string; pinnedBadges?: string[]; discoverable?: boolean; profileVisibility?: Visibility; createdAt?: string; ownerUserId?: string; }
+export interface Profile { username: string; firstName: string; lastName: string; displayName: string; status: string; bio: string; email: string; emailVisibility: Visibility; phone: string; phoneVisibility: Visibility; interests: string[]; huntingState: string; avatarUrl?: string; bannerUrl?: string; pinnedBadges?: string[]; discoverable?: boolean; profileVisibility?: Visibility; createdAt?: string; ownerUserId?: string; }
 export interface Friend { id: number; name: string; email?: string; phone?: string; notes?: string; createdAt?: string; }
 export interface FriendRequest { id: number; fromUserId: string; fromName: string; toUserId: string; toName: string; status: string; createdAt?: string; }
 export interface Friend { id: number; name: string; email?: string; phone?: string; notes?: string; createdAt?: string; }

@@ -26,6 +26,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
+  const [username, setUsername] = useState(profile.username ?? '');
   const [status, setStatus] = useState(profile.status);
   const [bio, setBio] = useState(profile.bio);
   const [email, setEmail] = useState(profile.email);
@@ -78,13 +79,13 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
     setBusy(true); setErr('');
     try {
       const clean = interests.map(i => i.trim()).filter(Boolean).map(i => i.slice(0, 60));
-      await api.updateProfile({ firstName: firstName.trim(), lastName: lastName.trim(), status: status.trim(), bio, email: email.trim(), emailVisibility: emailVis, phone: phone.trim(), phoneVisibility: phoneVis, interests: clean });
+      await api.updateProfile({ firstName: firstName.trim(), lastName: lastName.trim(), username: username.trim(), status: status.trim(), bio, email: email.trim(), emailVisibility: emailVis, phone: phone.trim(), phoneVisibility: phoneVis, interests: clean });
       setEditing(false); setMsg('Profile saved.'); onProfileChanged();
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save profile.'); }
     finally { setBusy(false); }
   }
   function startEdit() {
-    setFirstName(profile.firstName); setLastName(profile.lastName); setStatus(profile.status); setBio(profile.bio);
+    setFirstName(profile.firstName); setLastName(profile.lastName); setUsername(profile.username ?? ''); setStatus(profile.status); setBio(profile.bio);
     setEmail(profile.email); setEmailVis(profile.emailVisibility); setPhone(profile.phone); setPhoneVis(profile.phoneVisibility);
     setInterests(profile.interests); setEditing(true);
   }
@@ -141,6 +142,7 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
             </h2>
           </div>
           <p className="status" style={{ margin: '4px 0 0' }}>{profile.status || 'No status set'}</p>
+          {profile.username && <p className="muted" style={{ margin: '2px 0 0' }}>@{profile.username}</p>}
           {profile.bio && <><div className="mini-label">About me</div><p style={{ margin: '2px 0 0' }}>{profile.bio}</p></>}
           {showContact && (
             <div className="row-wrap" style={{ marginTop: 8 }}>
@@ -158,6 +160,9 @@ export default function ProfileTab({ profile, friends, gear, settings, onProfile
             <input value={firstName} onChange={e => setFirstName(e.target.value)} />
             <label>Last name</label>
             <input value={lastName} onChange={e => setLastName(e.target.value)} />
+            <label>Username</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="e.g. ridge_hunter" />
+            <p className="small">Unique across Basecamp — other hunters find you by it. 3–20 characters: letters, numbers and underscores.</p>
             <label>Status — shows under your name</label>
             <input value={status} onChange={e => setStatus(e.target.value)} placeholder="e.g. In the stand this weekend" />
             <label>About yourself</label>

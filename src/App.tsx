@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import type { AppSettings, Camp, Friend, GearItem, Hunt, HuntNowCamp, Pin, Profile } from './types';
 import { fmtSpeed, fmtTempF } from './types';
@@ -8,7 +8,7 @@ import ProfileTab from './components/ProfileTab';
 import CommunityTab from './components/CommunityTab';
 import AuthScreen from './components/AuthScreen';
 import { GearTab, HuntsTab, MapsTab } from './components/SimpleTabs';
-import { loadAuthConfig, getAuthConfig, getSession, subscribeAuth, signOut } from './lib/supabase';
+import { loadAuthConfig, getAuthConfig, getSession, sessionUser, subscribeAuth, signOut } from './lib/supabase';
 import { containsBadLanguage, BAD_LANGUAGE_WARNING } from './lib/profanity';
 import { HERO_DAWN } from './assets/heroDawn';
 
@@ -70,6 +70,7 @@ export default function App() {
   const [needsProfile, setNeedsProfile] = useState(false);
   const [setupFirst, setSetupFirst] = useState('');
   const [setupLast, setSetupLast] = useState('');
+  const [setupUsername, setSetupUsername] = useState('');
   const [setupState, setSetupState] = useState('MD');
   const [setupInterests, setSetupInterests] = useState<string[]>([]);
   const [setupErr, setSetupErr] = useState('');
@@ -87,12 +88,15 @@ export default function App() {
       if (cancelled) return;
       setAuthConfiguredState(cfg.configured);
       setAuthUnreachable(!!cfg.unreachable);
-      setAuthReady(true);
-      if (!cfg.configured) { setSignedIn(true); return; }
+      if (!cfg.configured) { setSignedIn(true); setAuthReady(true); return; }
+      // A device that has signed in before goes straight to the app —
+      // authReady waits for the session check so the sign-in screen
+      // never flashes for a returning hunter.
       const session = await getSession();
       if (cancelled) return;
       setSignedIn(!!session);
       unsubscribe = await subscribeAuth(s => { if (!cancelled) setSignedIn(s); });
+      if (!cancelled) setAuthReady(true);
     })();
     return () => { cancelled = true; unsubscribe?.(); };
   }, []);
@@ -188,9 +192,26 @@ export default function App() {
     catch (e) { setError(e instanceof Error ? e.message : 'Could not check in.'); }
     finally { setBusy(false); }
   }
+  // Prefill the first-run setup from the account itself: the name and
+  // username typed on the create-account form ride along as sign-up
+  // metadata, so a new hunter doesn't have to type them twice.
+  const setupPrefilled = useRef(false);
+  useEffect(() => {
+    if (!needsProfile || setupPrefilled.current) return;
+    setupPrefilled.current = true;
+    (async () => {
+      const u = await sessionUser();
+      if (!u) return;
+      if (u.firstName) setSetupFirst(prev => prev || u.firstName);
+      if (u.lastName) setSetupLast(prev => prev || u.lastName);
+      if (u.username) setSetupUsername(prev => prev || u.username);
+    })();
+  }, [needsProfile]);
+
   async function saveSetupProfile() {
     if (!setupFirst.trim() || !setupLast.trim()) { setSetupErr('First and last name are required.'); return; }
-    if (containsBadLanguage(setupFirst) || containsBadLanguage(setupLast)) { setSetupErr(BAD_LANGUAGE_WARNING); return; }
+    if (!setupUsername.trim()) { setSetupErr('Pick a username — other hunters find you by it.'); return; }
+    if (containsBadLanguage(setupFirst) || containsBadLanguage(setupLast) || containsBadLanguage(setupUsername)) { setSetupErr(BAD_LANGUAGE_WARNING); return; }
     setBusy(true); setSetupErr('');
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -199,7 +220,7 @@ export default function App() {
       // the token lookup before the request could stall, so Save did
       // nothing, showed no error, and left no trace in the logs).
       await Promise.race([
-        api.updateProfile({ firstName: setupFirst.trim(), lastName: setupLast.trim(), huntingState: setupState, interests: setupInterests }),
+        api.updateProfile({ firstName: setupFirst.trim(), lastName: setupLast.trim(), username: setupUsername.trim(), huntingState: setupState, interests: setupInterests }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Save is taking too long — please check your connection and try again.')), 20_000); }),
       ]);
       setNeedsProfile(false);
@@ -220,6 +241,7 @@ export default function App() {
       {!authReady && (
         <div className="content"><p>Loading Basecamp…</p></div>
       )}
+      {!authReady && <div className="content"><p>Loading Basecamp…</p></div>}
       {authReady && !signedIn && authConfiguredState && <AuthScreen onSignedIn={() => { setSignedIn(true); setLoading(true); loadAll(); }} />}
       {signedIn && needsProfile && profile && (
         <div className="content">
@@ -230,6 +252,9 @@ export default function App() {
             <input id="setup-first" value={setupFirst} onChange={e => setSetupFirst(e.target.value)} placeholder="First name" />
             <label htmlFor="setup-last">Last name</label>
             <input id="setup-last" value={setupLast} onChange={e => setSetupLast(e.target.value)} placeholder="Last name" />
+            <label htmlFor="setup-username">Username</label>
+            <input id="setup-username" value={setupUsername} onChange={e => setSetupUsername(e.target.value)} placeholder="e.g. ridge_hunter" />
+            <p className="small">Unique across Basecamp — other hunters find you by it. 3–20 characters: letters, numbers and underscores.</p>
             <label htmlFor="setup-state">Hunting state</label>
             <select id="setup-state" value={setupState} onChange={e => setSetupState(e.target.value)}>
               {['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'].map(s => <option key={s} value={s}>{s}</option>)}
@@ -242,7 +267,7 @@ export default function App() {
             </div>
             {setupErr && <p className="err">{setupErr}</p>}
             <div className="row" style={{ marginTop: 10 }}>
-              <button className="btn primary grow" disabled={busy || !setupFirst.trim() || !setupLast.trim()} onClick={saveSetupProfile}>Save profile</button>
+              <button className="btn primary grow" disabled={busy || !setupFirst.trim() || !setupLast.trim() || !setupUsername.trim()} onClick={saveSetupProfile}>Save profile</button>
               {authConfiguredState && <button className="btn" onClick={async () => { await signOut(); setSignedIn(false); }}>Sign out</button>}
             </div>
             {!setupFirst.trim() && <p className="small">First and last name are required.</p>}
