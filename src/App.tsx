@@ -412,7 +412,7 @@ export default function App() {
       <nav className="bottomnav">
         {TABS.map(t => (
           t.id === 'basecamp' ? (
-            <button key={t.id} className={`medallion ${tab === t.id ? 'active' : ''}`} onClick={() => { setTab(t.id); }} aria-label="Basecamp">
+            <button key={t.id} className={`medallion ${tab === t.id ? 'active' : ''}`} onClick={() => { setTab(t.id); setOpenCampId(null); }} aria-label="Basecamp">
               <span className="medallion-word">BASE</span>
               <span className="medallion-word">CAMP</span>
             </button>
